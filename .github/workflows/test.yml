@@ -1,0 +1,67 @@
+name: test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor declared in pyproject.toml; test it so the
+        # minimum supported version cannot silently break.
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The secret scan diffs against the base branch, which needs
+          # more than the default shallow single-commit checkout.
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Guard rail: fail CI if any real secret shape shows up in the diff.
+      # A blunt regex check, not a substitute for the app's own redaction
+      # logic — it exists as a second, independent net.
+      - name: Scan for accidentally committed secrets
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Character classes break up each literal so this file does not
+          # match its own patterns — otherwise any PR touching the workflow
+          # fails the scan against itself.
+          PATTERN='(sk[_]live_|sk-or-v1-[A-Za-z0-9]{16,}|sk-[A-Za-z0-9]{32,}|BEGIN [A-Z ]*PRIVATE[ ]KEY|WALLET[_]PRIVATE[_]KEY[[:space:]]*=[[:space:]]*[^[:space:]]+)'
+          FILES=$(git diff --name-only --diff-filter=d "$BASE_SHA" "$HEAD_SHA")
+          if [ -z "$FILES" ]; then
+            echo "No files changed; skipping secret scan."
+            exit 0
+          fi
+          # .env.example documents variable *names* with empty values; the
+          # pattern requires a non-empty value, so those lines do not match.
+          if echo "$FILES" | xargs grep -lE "$PATTERN" 2>/dev/null; then
+            echo "Possible live secret detected in diff. Failing CI."
+            exit 1
+          fi
+          echo "No secret-shaped strings found in changed files."
+
+      - name: Run tests with coverage
+        # cov-fail-under is the enforced floor. Move it upward only, and
+        # only with the user's agreement — never lower it silently to make
+        # a red build go green.
+        run: pytest --cov=src --cov-report=term-missing --cov-fail-under=93

@@ -17,6 +17,7 @@ before any code that can touch the network or a wallet.
 |---|---|---|
 | 0 | Config, domain types, structured logging, live gate | ✅ Done |
 | 1 | Risk engine: sizing, slippage, stops, circuit breaker | ✅ Done |
+| — | CI (tests + coverage floor), PostHog telemetry | ✅ Done |
 | 2 | Mocked execution layer + fill simulator | ⬜ Next |
 | 3 | Momentum strategy module | ⬜ |
 | 4 | Backtest mode (GeckoTerminal data, net-of-fees reporting) | ⬜ |
@@ -111,6 +112,31 @@ float error at the boundary.
   Typing a bigger number is not enough — that friction is intentional.
 - **Logs redact secrets.** Sensitive field names and registered secret
   values are scrubbed from messages, extras, and tracebacks alike.
+
+## Observability
+
+Structured logs are the audit trail. The same redacted payloads are
+mirrored to PostHog so behaviour is queryable without a custom dashboard.
+
+Telemetry is **off unless `POSTHOG_API_KEY` is set** — an unconfigured bot
+logs exactly as before and sends nothing. A PostHog outage can never
+interrupt trading: sink failures are caught and logged, never raised.
+
+Redaction happens once, in `core.logging.redact()`, and the identical dict
+goes to both the log and PostHog. There is deliberately no code path that
+builds a separate payload for telemetry.
+
+Events currently wired: `risk.blocked` (one per rejection reason),
+`risk.daily_halt_triggered`, `gate.live_mode_refused`. The rest of the
+schema is marked pending until its call site exists — see
+`.claude/skills/posthog-observability/references/event-schema.md`.
+
+## CI
+
+`.github/workflows/test.yml` runs the suite on Python 3.11 and 3.12 for
+every PR into `main`, enforcing a **93% coverage floor** (current: 94%).
+The floor moves up, never quietly down. A PR-only regex scan for
+secret-shaped strings runs as a second net beyond the app's own redaction.
 
 ## Still open before the paper run
 

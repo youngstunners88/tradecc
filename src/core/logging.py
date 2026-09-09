@@ -85,6 +85,17 @@ def _sanitize(value: Any, key: str | None = None) -> Any:
     return _scrub_text(str(value))
 
 
+def redact(payload: dict[str, Any]) -> dict[str, Any]:
+    """Redact a property mapping.
+
+    Public because anything that ships event data off this machine must
+    reuse this exact path rather than building its own payload — see
+    `core.telemetry`. A second redaction implementation is a second chance
+    to get it wrong.
+    """
+    return {key: _sanitize(value, key=key) for key, value in payload.items()}
+
+
 _STANDARD_RECORD_FIELDS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__) | {
     "message",
     "asctime",

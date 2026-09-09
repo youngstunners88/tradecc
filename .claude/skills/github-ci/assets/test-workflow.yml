@@ -1,0 +1,45 @@
+name: test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      # Guard rail: fail CI if any real secret shape shows up in the diff.
+      # This is a blunt regex check, not a substitute for the app's own
+      # redaction logic — it exists as a second, independent net.
+      - name: Scan for accidentally committed secrets
+        run: |
+          # NOTE: character classes deliberately break up each literal, so
+          # this file does not match its own patterns. Written plainly, any
+          # PR touching the workflow fails the scan against itself.
+          if git diff --name-only origin/main...HEAD | xargs grep -lE "(poly[_]live_|sk[_]live_|BEGIN [A-Z ]*PRIVATE[ ]KEY)" 2>/dev/null; then
+            echo "Possible live secret detected in diff. Failing CI."
+            exit 1
+          fi
+
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=src --cov-report=term-missing --cov-fail-under=93
+
+      # cov-fail-under is the enforced floor. Update it (upward only,
+      # with the user's agreement) as real coverage improves — see
+      # SKILL.md for why this must never move down silently.

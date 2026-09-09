@@ -12,12 +12,14 @@ plugs in without touching this file.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from decimal import Decimal
 
 from core.config import RunConfig
 from core.gate import GateResult, evaluate_live_gate
 from core.logging import get_logger
+from core.telemetry import log_and_track
 from core.types import Mode, Position, RejectionCode, RiskDecision, TradeIntent
 from risk.circuit_breaker import DailyCircuitBreaker
 from risk.position_sizing import check_position_size
@@ -68,7 +70,21 @@ class RiskEngine:
                 "detail": decision.describe(),
             },
         )
+        self._emit_rejection_events(intent, decision)
         return decision
+
+    def _emit_rejection_events(self, intent: TradeIntent, decision: RiskDecision) -> None:
+        """One tracked event per rejection reason, per the PostHog schema."""
+        for code, detail in decision.rejections:
+            if code is RejectionCode.LIVE_GATE_NOT_MET:
+                log_and_track("gate.live_mode_refused", reason=detail)
+            else:
+                log_and_track(
+                    "risk.blocked",
+                    reason=code.value,
+                    token=intent.signal.token_mint,
+                    attempted_size_usd=intent.size_usd,
+                )
 
     def evaluate_position(
         self, position: Position, current_price: Decimal
@@ -94,14 +110,13 @@ class RiskEngine:
         """Book a closed trade's P&L and trip the breaker if it breaches."""
         state = self._breaker.record_realized_pnl(pnl_usd, now)
         if state.halted:
-            logger.warning(
-                "circuit_breaker_tripped",
-                extra={
-                    "trading_day": state.trading_day.isoformat(),
-                    "realized_pnl_usd": state.realized_pnl_usd,
-                    "limit_usd": self._config.risk.daily_loss_limit_usd,
-                    "reason": state.halt_reason,
-                },
+            log_and_track(
+                "risk.daily_halt_triggered",
+                level=logging.WARNING,
+                realized_loss_usd=-state.realized_pnl_usd,
+                threshold_usd=self._config.risk.daily_loss_limit_usd,
+                trading_day=state.trading_day.isoformat(),
+                reason=state.halt_reason,
             )
         return state
 
