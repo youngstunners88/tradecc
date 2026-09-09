@@ -1,0 +1,28 @@
+# Backtest mode — historical data only, no network calls to trade.
+mode: backtest
+
+risk:
+  position_size_usd: 10
+  max_slippage_pct: 0.5
+  daily_loss_limit_usd: 20
+  per_trade_stop_loss_pct: 5
+  per_trade_take_profit_pct: 10
+
+strategy:
+  name: momentum
+  params:
+    fast_ema: 12
+    slow_ema: 26
+    rsi_period: 14
+    rsi_overbought: 70
+    rsi_oversold: 30
+  token_mints: []
+
+data:
+  source: geckoterminal
+  cache_dir: research/.candle-cache
+  max_requests_per_minute: 30
+  candle_interval: 15m
+
+state_dir: ops/.state/backtest
+gate_file: ops/live-gate.json

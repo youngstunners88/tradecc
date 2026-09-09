@@ -1,0 +1,15 @@
+{
+  "_comment": "Template for ops/live-gate.json. Copy, fill with REAL measured results, and commit as an audit record. Every field is checked by core/gate.py; a missing or malformed field leaves live mode locked.",
+
+  "threshold_set_at": "2026-09-09T10:00:00+00:00",
+  "max_drawdown_threshold_pct": 15,
+
+  "paper_started_at": "2026-09-10T00:00:00+00:00",
+  "paper_ended_at": "2026-10-10T00:00:00+00:00",
+
+  "observed_max_drawdown_pct": 0,
+  "net_expectancy_usd": 0,
+
+  "approved_by": "",
+  "approved_at": ""
+}

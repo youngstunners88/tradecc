@@ -1,0 +1,107 @@
+"""The daily circuit breaker must actually halt trading, and stay halted."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+from decimal import Decimal
+
+import pytest
+
+from core.types import RejectionCode
+from risk.circuit_breaker import DailyCircuitBreaker
+from risk.state import RiskStateStore
+
+
+@pytest.fixture
+def breaker(store: RiskStateStore) -> DailyCircuitBreaker:
+    return DailyCircuitBreaker(Decimal("20"), store)
+
+
+def test_approves_while_under_limit(breaker, now):
+    breaker.record_realized_pnl(Decimal("-5"), now)
+    assert breaker.check(now).approved
+
+
+def test_halts_when_daily_loss_limit_reached(breaker, now):
+    breaker.record_realized_pnl(Decimal("-20"), now)
+
+    decision = breaker.check(now)
+
+    assert not decision.approved
+    assert RejectionCode.CIRCUIT_BREAKER_TRIPPED in decision.codes
+
+
+def test_halts_on_accumulated_losses_not_just_one_trade(breaker, now):
+    for _ in range(4):
+        breaker.record_realized_pnl(Decimal("-5"), now)
+
+    assert not breaker.check(now).approved
+
+
+def test_halt_survives_restart(store, now):
+    DailyCircuitBreaker(Decimal("20"), store).record_realized_pnl(Decimal("-25"), now)
+
+    # A brand-new breaker over the same store is what a process restart looks like.
+    restarted = DailyCircuitBreaker(Decimal("20"), RiskStateStore(store.path.parent))
+
+    assert not restarted.check(now).approved
+
+
+def test_halt_latches_even_if_later_profit_recovers_the_loss(breaker, now):
+    breaker.record_realized_pnl(Decimal("-20"), now)
+    breaker.record_realized_pnl(Decimal("+50"), now)
+
+    # The day is over for trading purposes regardless of what happened after.
+    assert not breaker.check(now).approved
+
+
+def test_new_trading_day_clears_the_halt(breaker, now):
+    breaker.record_realized_pnl(Decimal("-25"), now)
+    assert not breaker.check(now).approved
+
+    tomorrow = now + timedelta(days=1)
+
+    assert breaker.check(tomorrow).approved
+    assert breaker.state(tomorrow).realized_pnl_usd == Decimal("0")
+
+
+def test_breach_noticed_on_check_is_persisted(store, now):
+    breaker = DailyCircuitBreaker(Decimal("20"), store)
+    breaker.record_realized_pnl(Decimal("-20"), now)
+
+    breaker.check(now)
+
+    assert store.load(now).halted is True
+
+
+def test_remaining_budget_shrinks_with_losses_and_floors_at_zero(breaker, now):
+    assert breaker.remaining_loss_budget_usd(now) == Decimal("20")
+
+    breaker.record_realized_pnl(Decimal("-8"), now)
+    assert breaker.remaining_loss_budget_usd(now) == Decimal("12")
+
+    breaker.record_realized_pnl(Decimal("-50"), now)
+    assert breaker.remaining_loss_budget_usd(now) == Decimal("0")
+
+
+def test_profit_does_not_raise_the_loss_budget(breaker, now):
+    breaker.record_realized_pnl(Decimal("+100"), now)
+
+    # Winning early must not license a bigger loss later in the day.
+    assert breaker.remaining_loss_budget_usd(now) == Decimal("20")
+
+
+def test_rejects_non_positive_limit(store):
+    with pytest.raises(ValueError):
+        DailyCircuitBreaker(Decimal("0"), store)
+
+
+def test_corrupt_state_file_does_not_unlock_trading(store, now):
+    store.path.parent.mkdir(parents=True, exist_ok=True)
+    store.path.write_text("{ not json")
+
+    breaker = DailyCircuitBreaker(Decimal("20"), store)
+
+    # Corrupt state yields a clean day rather than a crash or a phantom halt.
+    assert breaker.check(now).approved
+    assert breaker.state(now).realized_pnl_usd == Decimal("0")

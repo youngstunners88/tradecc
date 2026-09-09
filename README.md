@@ -1,0 +1,119 @@
+# TradeCC
+
+Autonomous momentum trading bot for **Solana**, built to trade at small
+position sizes ($5–$10) and default to **paper trading** until it clears an
+explicit validation gate.
+
+Read `CLAUDE.md` first — it holds the seven non-negotiable safety rules.
+`planning/specs/mvp_spec.md` defines what v0.1 is.
+
+## Status: Stage 1 of 7
+
+This is **not a runnable bot yet.** What exists is the foundation and the
+safety layer that everything else gets built against, deliberately built
+before any code that can touch the network or a wallet.
+
+| Stage | Scope | State |
+|---|---|---|
+| 0 | Config, domain types, structured logging, live gate | ✅ Done |
+| 1 | Risk engine: sizing, slippage, stops, circuit breaker | ✅ Done |
+| 2 | Mocked execution layer + fill simulator | ⬜ Next |
+| 3 | Momentum strategy module | ⬜ |
+| 4 | Backtest mode (GeckoTerminal data, net-of-fees reporting) | ⬜ |
+| 5 | Helius RPC + Jupiter quotes, paper mode | ⬜ |
+| 6 | Live execution, gated | ⬜ |
+| 7 | Ops, monitoring, deploy | ⬜ |
+
+There is currently **no CLI entrypoint, no network code, and no wallet
+handling.** Nothing in this repo can send a transaction.
+
+## Setup
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m pytest
+```
+
+Copy `.env.example` to `.env` for local development. `.env` is gitignored
+and must never be committed.
+
+## Run modes
+
+Selected by `BOT_MODE`, or the `mode:` key in the config file, or an
+explicit argument — resolved in that order of precedence. There is no
+default; an unset mode is an error rather than a guess.
+
+| Mode | Config | Network | Sends transactions |
+|---|---|---|---|
+| `backtest` | `config.backtest.yaml` | Historical data only | No |
+| `paper` | `config.paper.yaml` | Real quotes | **No** — simulated fills |
+| `live` | `config.live.yaml` | Real quotes | Yes — **gated** |
+
+## The live gate
+
+`live` mode is locked, and setting `mode: live` does not unlock it. The
+risk engine re-checks the gate on every single trade intent, so no code
+path reaches execution without passing it.
+
+Unlocking requires all of the following in `ops/live-gate.json` (see
+`ops/live-gate.example.json`):
+
+- At least **30 days** of paper trading against real market conditions.
+- **Positive net expectancy** after fees and slippage — not gross P&L.
+- Observed max drawdown **within a threshold that was set before the run
+  started.** A threshold recorded after the fact fails the check, by design.
+- An explicit human sign-off (`approved_by`, `approved_at`).
+
+The gate **fails closed**: a missing file, malformed JSON, or any missing
+field leaves live mode locked.
+
+## Architecture
+
+```
+src/
+  core/       config, domain types, structured logging, the live gate
+  risk/       position sizing, slippage cap, stops, daily circuit breaker
+  strategy/   strategy modules (empty until Stage 3)
+  execution/  the only place that talks to the network or the key (Stage 2+)
+  tests/      unit tests — no network access required
+```
+
+Two rules shape the layout:
+
+- **Risk has veto power.** `execution/` must call `RiskEngine.approve()`
+  before acting on any intent, in *every* mode. The same checks run in
+  backtest and paper as in live — otherwise the validation run would be
+  evidence about a more permissive system than the one that goes live.
+- **Risk is strategy-agnostic.** It consumes a `TradeIntent` and knows
+  nothing about how the signal was produced, so v0.2 copy-trading plugs in
+  without touching `risk/` or `execution/`.
+
+### Money is `Decimal`, never `float`
+
+Binary floating point cannot represent decimal fractions exactly.
+Accumulating that error into P&L means the circuit breaker eventually
+compares against a number that is quietly wrong, so every monetary value
+is `Decimal` and YAML values are parsed via `str` to avoid inheriting
+float error at the boundary.
+
+## Safety behaviours worth knowing
+
+- **The circuit breaker latches.** Once the daily loss limit is hit,
+  trading halts for that UTC day and stays halted even if later trades
+  would recover the loss. Only a new trading day clears it.
+- **It survives a restart.** State persists to disk, so killing the
+  process is not a way to clear a halt.
+- **Config fails loud.** Unknown keys are rejected (a typo'd risk limit
+  must not be silently ignored), and a stop-loss larger than the daily
+  loss limit is refused because the breaker could never fire in time.
+- **Position size above $10 needs an explicit acknowledgement** in config.
+  Typing a bigger number is not enough — that friction is intentional.
+- **Logs redact secrets.** Sensitive field names and registered secret
+  values are scrubbed from messages, extras, and tracebacks alike.
+
+## Still open before the paper run
+
+- Exact TA parameters and the token watchlist (settled by backtest).
+- **The max-drawdown threshold for the validation gate**, which must be
+  written to a decision record *before* the 30-day clock starts.

@@ -1,4 +1,4 @@
-# Solana Small-Capital Trading Bot
+# TradeCC — Solana Small-Capital Trading Bot
 
 I am building an autonomous trading bot for the **Solana** chain, designed to
 trade responsibly at **small position sizes ($5–$10 to start)**, with the
