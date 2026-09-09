@@ -123,6 +123,50 @@ class DataConfig(StrictModel):
         return value
 
 
+class CostsConfig(StrictModel):
+    """Fixed-cost parameters for fill simulation.
+
+    Defaults are deliberately pessimistic. Understating costs produces a
+    paper run that clears the validation gate and then loses money live,
+    which is the most expensive possible failure mode for this project.
+    """
+
+    base_fee_lamports: int = 5000
+    priority_fee_microlamports: int = 200_000
+    # Rent-exempt minimum for an SPL associated token account.
+    ata_rent_lamports: int = 2_039_280
+    platform_fee_bps: int = 0
+    # Placeholder until the data layer supplies a live SOL price (Stage 5).
+    sol_price_usd: Decimal = Decimal("200")
+
+    @field_validator("sol_price_usd", mode="before")
+    @classmethod
+    def _to_decimal(cls, value: Any) -> Decimal:
+        try:
+            return Decimal(str(value))
+        except InvalidOperation as exc:
+            raise ValueError(f"not a valid decimal: {value!r}") from exc
+
+    @field_validator("sol_price_usd")
+    @classmethod
+    def _price_positive(cls, value: Decimal) -> Decimal:
+        if value <= 0:
+            raise ValueError("must be greater than zero")
+        return value
+
+    @field_validator(
+        "base_fee_lamports",
+        "priority_fee_microlamports",
+        "ata_rent_lamports",
+        "platform_fee_bps",
+    )
+    @classmethod
+    def _non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("must not be negative")
+        return value
+
+
 class ProvidersConfig(StrictModel):
     """External provider endpoints and their client-side rate limits.
 
@@ -160,6 +204,7 @@ class RunConfig(StrictModel):
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
     data: DataConfig = Field(default_factory=DataConfig)
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
+    costs: CostsConfig = Field(default_factory=CostsConfig)
     state_dir: Path = Path("ops/.state")
     gate_file: Path = Path("ops/live-gate.json")
 

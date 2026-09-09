@@ -18,15 +18,44 @@ before any code that can touch the network or a wallet.
 | 0 | Config, domain types, structured logging, live gate | ✅ Done |
 | 1 | Risk engine: sizing, slippage, stops, circuit breaker | ✅ Done |
 | — | CI (tests + coverage floor), PostHog telemetry | ✅ Done |
-| 2 | Mocked execution layer + fill simulator | ⬜ Next |
-| 3 | Momentum strategy module | ⬜ |
+| 2 | Execution layer: mock, fill simulator, Helius + Jupiter (read-only) | ✅ Done |
+| 3 | Momentum strategy module | ⬜ Next |
 | 4 | Backtest mode (GeckoTerminal data, net-of-fees reporting) | ⬜ |
-| 5 | Helius RPC + Jupiter quotes, paper mode | ⬜ |
+| 5 | Paper mode wiring | ⬜ |
 | 6 | Live execution, gated | ⬜ |
 | 7 | Ops, monitoring, deploy | ⬜ |
 
-There is currently **no CLI entrypoint, no network code, and no wallet
-handling.** Nothing in this repo can send a transaction.
+There is currently **no CLI entrypoint and no wallet handling.** The
+execution layer is read-only: it fetches quotes and RPC state, and there
+is no code path that builds, signs, or sends a transaction. Both client
+classes have a test asserting their public surface, so adding a `send`
+method fails the suite rather than slipping in quietly.
+
+## The execution seam
+
+`execution/` is the only package that talks to the network. The mocking
+boundary is the **HTTP transport**, not the client:
+
+- **Unit tests never touch the network** — not "shouldn't", *can't*. The
+  transport is injected, tests pass a fake returning canned payloads, and
+  there is no ambient client able to make a real request.
+- Retry, backoff, `Retry-After` handling, rate limiting, and error mapping
+  are all covered by those offline tests. Mocking at the client level
+  would leave exactly that logic untested.
+- `MockQuoteSource` is the separate seam for exercising strategy and risk
+  end-to-end offline. A test asserts it and the real Jupiter client are
+  substitutable through the same `QuoteSource` protocol.
+
+### Simulated fills are pessimistic on purpose
+
+Paper and backtest fills use the quote's **worst-case** price, never its
+expected price, and cost modelling defaults are deliberately harsh. An
+optimistic simulation produces a validation gate that passes systems which
+then lose money live — the most expensive failure mode this project has.
+
+The cost model makes the small-size problem visible: on a $5 position that
+opens a new token account, fixed costs exceed **8% of the position** before
+the price moves at all.
 
 ## Setup
 
