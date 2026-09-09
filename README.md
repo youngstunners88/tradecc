@@ -19,8 +19,8 @@ before any code that can touch the network or a wallet.
 | 1 | Risk engine: sizing, slippage, stops, circuit breaker | ✅ Done |
 | — | CI (tests + coverage floor), PostHog telemetry | ✅ Done |
 | 2 | Execution layer: mock, fill simulator, Helius + Jupiter (read-only) | ✅ Done |
-| 3 | Momentum strategy module | ⬜ Next |
-| 4 | Backtest mode (GeckoTerminal data, net-of-fees reporting) | ⬜ |
+| 3 | Momentum strategy module | ✅ Done |
+| 4 | Backtest mode (GeckoTerminal data, net-of-fees reporting) | ⬜ Next |
 | 5 | Paper mode wiring | ⬜ |
 | 6 | Live execution, gated | ⬜ |
 | 7 | Ops, monitoring, deploy | ⬜ |
@@ -187,6 +187,44 @@ party's outage says nothing about whether your diff is correct, and a CI
 gate that fails for reasons the author cannot fix teaches people to
 ignore CI. Network tests are excluded from the default `pytest` run, so
 the unit suite always passes offline.
+
+## The strategy
+
+`strategy_momentum.py` — EMA crossover with an RSI filter:
+
+- **BUY** when the fast EMA crosses above the slow EMA and RSI is not
+  already overbought.
+- **SELL** on a downward crossover, or when RSI is overbought.
+- **HOLD** otherwise.
+
+Four properties are enforced by tests rather than left to convention:
+
+- **A strategy is a pure function of closed candles.** No I/O, no clock,
+  no randomness — a signal's timestamp is the candle's, never `now()`. A
+  strategy that consulted the wall clock could not be replayed, and the
+  validation gate would be measuring something other than what runs live.
+- **No look-ahead.** A test asserts the signal at bar N is identical
+  whether or not later bars exist. Indicators return lists aligned to
+  their input, with `None` during warmup, because a shorter list silently
+  misaligns against candles — the classic way look-ahead creeps in.
+- **Crossovers are events, not states.** "Fast is above slow" stays true
+  for a whole trend; acting on it every bar would re-enter continuously
+  and pay the full cost stack each time. A test walks past a cross and
+  asserts the following bars stay HOLD.
+- **Nothing signals on thin history.** Below `minimum_candles` the answer
+  is always HOLD — a signal from a half-warmed indicator is a signal from
+  noise.
+
+Indicators are hand-rolled in `Decimal` rather than taken from pandas.
+pandas computes in float64, and a signal that depends on float rounding
+can differ between a backtest and the live run meant to reproduce it.
+They are tested against independently derived reference values, not
+against their own output. pandas is still a fine choice for Stage 4
+*analysis*; it is the signal path specifically that stays exact.
+
+Adding a strategy means one module and one line in `strategy/registry.py`
+— nothing in `execution/` or `risk/` changes. An unknown strategy name is
+a hard error, never a silent fallback to a default.
 
 ## Provider rate limits
 
