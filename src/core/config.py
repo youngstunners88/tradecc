@@ -123,6 +123,35 @@ class DataConfig(StrictModel):
         return value
 
 
+class BacktestConfig(StrictModel):
+    """Backtest-only assumptions.
+
+    `assumed_slippage_pct` is exactly what its name says: historical
+    candles carry no quotes, so backtest fills cannot measure slippage,
+    only assume it. Keeping the assumption explicit and configurable is
+    the honest option — burying it in code would let a favourable number
+    quietly flatter every result.
+    """
+
+    initial_capital_usd: Decimal = Decimal("100")
+    assumed_slippage_pct: Decimal = Decimal("0.3")
+
+    @field_validator("initial_capital_usd", "assumed_slippage_pct", mode="before")
+    @classmethod
+    def _to_decimal(cls, value: Any) -> Decimal:
+        try:
+            return Decimal(str(value))
+        except InvalidOperation as exc:
+            raise ValueError(f"not a valid decimal: {value!r}") from exc
+
+    @field_validator("initial_capital_usd", "assumed_slippage_pct")
+    @classmethod
+    def _positive(cls, value: Decimal) -> Decimal:
+        if value <= 0:
+            raise ValueError("must be greater than zero")
+        return value
+
+
 class CostsConfig(StrictModel):
     """Fixed-cost parameters for fill simulation.
 
@@ -205,6 +234,7 @@ class RunConfig(StrictModel):
     data: DataConfig = Field(default_factory=DataConfig)
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     costs: CostsConfig = Field(default_factory=CostsConfig)
+    backtest: BacktestConfig = Field(default_factory=BacktestConfig)
     state_dir: Path = Path("ops/.state")
     gate_file: Path = Path("ops/live-gate.json")
 

@@ -7,9 +7,17 @@ code that isn't in the spec, stop and check whether the spec needs
 updating first (that's a `/planning` task).
 
 ## Structure
+- `core/` — config loading and validation, domain types, structured
+  logging with redaction, telemetry, rate limiting, and the live-trading
+  gate. No trading logic; everything else depends on it.
 - `execution/` — RPC client (Helius), Jupiter quote/swap calls,
-  `simulateTransaction` wrapper, transaction signing/sending. This is
-  the ONLY place that talks to the network or touches the wallet key.
+  market data (GeckoTerminal), candle caching, `simulateTransaction`
+  wrapper, transaction signing/sending. This is the ONLY place that
+  talks to the network or touches the wallet key. Market data lives here
+  for exactly that reason, even though it does not trade.
+- `backtest/` — the backtest run mode: the bar-by-bar runner and the
+  report writer. Depends on strategy, risk, and execution; nothing
+  depends on it.
 - `strategy/` — strategy modules. v0.1 has one: momentum/TA
   (`strategy_momentum.py`). Must be pluggable — a future
   `strategy_copytrade.py` (v0.2) should be able to drop in against the

@@ -12,11 +12,11 @@ from datetime import datetime
 from decimal import Decimal
 
 from core.types import RejectionCode, RiskDecision
-from risk.state import DailyRiskState, RiskStateStore
+from risk.state import DailyRiskState, RiskStateStorage
 
 
 class DailyCircuitBreaker:
-    def __init__(self, daily_loss_limit_usd: Decimal, store: RiskStateStore) -> None:
+    def __init__(self, daily_loss_limit_usd: Decimal, store: RiskStateStorage) -> None:
         if daily_loss_limit_usd <= 0:
             raise ValueError("daily_loss_limit_usd must be positive")
         self._limit = daily_loss_limit_usd

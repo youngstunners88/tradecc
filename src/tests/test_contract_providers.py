@@ -15,7 +15,8 @@ from decimal import Decimal
 
 import pytest
 
-from core.config import ProvidersConfig
+from core.config import DataConfig, ProvidersConfig
+from execution.geckoterminal import GeckoTerminalClient
 from execution.helius import HeliusRpcClient
 from execution.http import RetryPolicy
 from execution.jupiter import JupiterQuoteClient
@@ -24,6 +25,8 @@ pytestmark = pytest.mark.network
 
 SOL = "So11111111111111111111111111111111111111112"
 USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+# The canonical SOL/USDC pool on Solana, used for OHLCV drift checks.
+SOL_USDC_POOL = "8sLbNZoA1cfnvMJLPfp98ZLAnFSYCFApfJKMbiXNLwxj"
 
 
 @pytest.fixture(scope="module")
@@ -61,6 +64,32 @@ def test_jupiter_honours_the_requested_slippage_bound(jupiter):
 
     # 50 bps requested; the realised bound must not exceed it materially.
     assert detailed.quote.slippage_pct <= Decimal("0.51")
+
+
+@pytest.fixture(scope="module")
+def geckoterminal() -> GeckoTerminalClient:
+    return GeckoTerminalClient(data=DataConfig(), retry=RetryPolicy(max_attempts=2))
+
+
+def test_geckoterminal_serves_candles_without_a_key(geckoterminal):
+    candles = geckoterminal.fetch_candles(SOL_USDC_POOL, "1h", limit=5)
+
+    assert len(candles) > 0
+
+
+def test_geckoterminal_candles_arrive_chronological_after_parsing(geckoterminal):
+    """The API returns newest-first; our parser must still hand back ascending."""
+    candles = geckoterminal.fetch_candles(SOL_USDC_POOL, "1h", limit=10)
+
+    assert [c.timestamp for c in candles] == sorted(c.timestamp for c in candles)
+
+
+def test_geckoterminal_ohlc_relationships_hold(geckoterminal):
+    """Shape, not values: high >= low, and close sits within the bar."""
+    for candle in geckoterminal.fetch_candles(SOL_USDC_POOL, "1h", limit=10):
+        assert candle.high >= candle.low
+        assert candle.low <= candle.close <= candle.high
+        assert candle.volume >= 0
 
 
 @pytest.mark.skipif(

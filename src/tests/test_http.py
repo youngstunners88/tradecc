@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 
 import pytest
 
@@ -186,6 +187,32 @@ def test_malformed_json_raises_provider_error(slept):
 
     with pytest.raises(ProviderError, match="not valid JSON"):
         client(transport, slept).request("GET", "https://x.test/a").json()
+
+
+def test_transport_sends_an_explicit_user_agent():
+    """urllib's default UA is 403'd by GeckoTerminal — caught by a contract test."""
+    import urllib.request
+
+    from execution.http import DEFAULT_USER_AGENT, UrllibTransport
+
+    captured = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["ua"] = request.get_header("User-agent")
+        captured["accept"] = request.get_header("Accept")
+        raise urllib.error.URLError("stop here — headers already captured")
+
+    original = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen
+    try:
+        with pytest.raises(TransportError):
+            UrllibTransport().request("GET", "https://x.test/a")
+    finally:
+        urllib.request.urlopen = original
+
+    assert captured["ua"] == DEFAULT_USER_AGENT
+    assert "Python-urllib" not in captured["ua"]
+    assert captured["accept"] == "application/json"
 
 
 def test_real_url_is_never_logged_when_redacted_url_given(slept, caplog):

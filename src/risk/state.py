@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import Protocol
 
 
 def current_trading_day(now: datetime | None = None) -> date:
@@ -67,6 +68,36 @@ class DailyRiskState:
             halted=bool(raw.get("halted", False)),
             halt_reason=raw.get("halt_reason") or None,  # type: ignore[arg-type]
         )
+
+
+class RiskStateStorage(Protocol):
+    """Where daily risk state lives.
+
+    Two implementations: on disk for real runs, where surviving a restart
+    is the whole point, and in memory for backtests, where persistence
+    would be a bug — a halt from one backtest leaking into the next makes
+    results depend on run order.
+    """
+
+    def load(self, now: datetime | None = None) -> DailyRiskState: ...
+
+    def save(self, state: DailyRiskState) -> None: ...
+
+
+class InMemoryRiskStateStore:
+    """Isolated per-instance state, for backtests and tests."""
+
+    def __init__(self) -> None:
+        self._state: DailyRiskState | None = None
+
+    def load(self, now: datetime | None = None) -> DailyRiskState:
+        today = current_trading_day(now)
+        if self._state is None or self._state.trading_day != today:
+            return DailyRiskState(trading_day=today)
+        return self._state
+
+    def save(self, state: DailyRiskState) -> None:
+        self._state = state
 
 
 class RiskStateStore:

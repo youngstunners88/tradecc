@@ -24,14 +24,14 @@ from core.types import Mode, Position, RejectionCode, RiskDecision, TradeIntent
 from risk.circuit_breaker import DailyCircuitBreaker
 from risk.position_sizing import check_position_size
 from risk.slippage import check_slippage
-from risk.state import DailyRiskState, RiskStateStore
+from risk.state import DailyRiskState, RiskStateStorage, RiskStateStore
 from risk.stops import StopEvaluation, evaluate_stops
 
 logger = get_logger("tradecc.risk")
 
 
 class RiskEngine:
-    def __init__(self, config: RunConfig, store: RiskStateStore | None = None) -> None:
+    def __init__(self, config: RunConfig, store: RiskStateStorage | None = None) -> None:
         self._config = config
         self._store = store or RiskStateStore(config.state_dir)
         self._breaker = DailyCircuitBreaker(config.risk.daily_loss_limit_usd, self._store)

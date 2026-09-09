@@ -24,6 +24,7 @@ from core.rate_limit import RateLimiter
 logger = get_logger("tradecc.http")
 
 DEFAULT_TIMEOUT_SECONDS = 15.0
+DEFAULT_USER_AGENT = "tradecc/0.1 (+https://github.com/youngstunners88/tradecc)"
 RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
@@ -81,6 +82,9 @@ class UrllibTransport:
     client, and everything above this class is transport-agnostic anyway.
     """
 
+    def __init__(self, user_agent: str = DEFAULT_USER_AGENT) -> None:
+        self._user_agent = user_agent
+
     def request(
         self,
         method: str,
@@ -91,6 +95,11 @@ class UrllibTransport:
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> HttpResponse:
         request = urllib.request.Request(url, data=body, method=method)
+        # urllib's default User-Agent ("Python-urllib/3.x") is rejected
+        # outright by some providers — GeckoTerminal answers it with a 403.
+        # Identifying ourselves is both a fix and good manners on a free tier.
+        request.add_header("User-Agent", self._user_agent)
+        request.add_header("Accept", "application/json")
         for key, value in (headers or {}).items():
             request.add_header(key, value)
         try:

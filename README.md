@@ -20,8 +20,8 @@ before any code that can touch the network or a wallet.
 | — | CI (tests + coverage floor), PostHog telemetry | ✅ Done |
 | 2 | Execution layer: mock, fill simulator, Helius + Jupiter (read-only) | ✅ Done |
 | 3 | Momentum strategy module | ✅ Done |
-| 4 | Backtest mode (GeckoTerminal data, net-of-fees reporting) | ⬜ Next |
-| 5 | Paper mode wiring | ⬜ |
+| 4 | Backtest mode (GeckoTerminal data, net-of-fees reporting) | ✅ Done |
+| 5 | Paper mode wiring | ⬜ Next |
 | 6 | Live execution, gated | ⬜ |
 | 7 | Ops, monitoring, deploy | ⬜ |
 
@@ -225,6 +225,51 @@ against their own output. pandas is still a fine choice for Stage 4
 Adding a strategy means one module and one line in `strategy/registry.py`
 — nothing in `execution/` or `risk/` changes. An unknown strategy name is
 a hard error, never a silent fallback to a default.
+
+## Backtesting
+
+`backtest/runner.py` walks candles bar by bar: strategy → risk → simulated
+fill. Three properties make the output worth trusting:
+
+- **The same risk engine runs.** Position sizing, slippage cap, stops and
+  the daily circuit breaker all apply exactly as they would live. A
+  backtest that skipped them would measure a more permissive system than
+  the one that trades.
+- **No look-ahead.** The strategy sees `candles[:i+1]`, never `i+1`. Fills
+  happen on the same bar that produced the signal, adjusted *adversely*
+  for slippage — buys fill higher, sells lower.
+- **Isolated state.** Risk state is in-memory per run, so a circuit-breaker
+  halt in one backtest cannot leak into the next and make results depend
+  on the order they were run in.
+
+Candles are cached to disk, so a backtest is reproducible and runnable
+offline — re-running against silently different data is a good way to
+"discover" an improvement that is really just a different sample.
+
+**Slippage in backtests is assumed, not measured.** Historical candles
+carry no quotes. `BacktestConfig.assumed_slippage_pct` keeps the
+assumption explicit and configurable rather than buried where a
+favourable number could quietly flatter every result. Every report
+repeats this caveat.
+
+### First real result (2026-09-09)
+
+SOL/USDC, 1h candles, ~6 weeks, default parameters, $10 positions:
+
+| | |
+|---|---|
+| Gross P&L | **+$0.32** |
+| Fees & costs | **−$0.44** |
+| **Net P&L** | **−$0.12** |
+| Trades | 15 |
+| Win rate (net) | 40% |
+| Max drawdown | 1.24% |
+
+The strategy is *gross* profitable and *net* unprofitable: costs are
+1.4× the gross edge. That is the entire thesis of this project in one
+line, and it does not clear the validation gate. Parameters and interval
+have not been tuned — that is Stage 5+ work, and must not be tuned on
+this same data.
 
 ## Provider rate limits
 
