@@ -19,7 +19,15 @@ strategy:
     rsi_period: 14
     rsi_overbought: 70
     rsi_oversold: 30
-  token_mints: []
+  token_mints:
+    - "So11111111111111111111111111111111111111112"
+
+paper:
+  # SOL/USDC on Solana — the pool candles are polled from.
+  pool_address: "8sLbNZoA1cfnvMJLPfp98ZLAnFSYCFApfJKMbiXNLwxj"
+  quote_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+  quote_mint_decimals: 6
+  poll_seconds: 300
 
 data:
   source: geckoterminal

@@ -37,6 +37,15 @@ from core.types import (
     SignalType,
     TradeIntent,
 )
+from core.performance import (
+    ClosedTrade,
+    expectancy,
+    gross_pnl,
+    max_drawdown_pct,
+    net_pnl,
+    total_fees,
+    win_rate_pct,
+)
 from execution.costs import CostModel
 from execution.fills import FillSimulator
 from risk.engine import RiskEngine
@@ -47,31 +56,6 @@ from strategy.base import Strategy
 logger = get_logger("tradecc.backtest")
 
 HUNDRED = Decimal(100)
-
-
-@dataclass(frozen=True)
-class ClosedTrade:
-    token_mint: str
-    entry_at: datetime
-    exit_at: datetime
-    entry_price: Decimal
-    exit_price: Decimal
-    size_usd: Decimal
-    fees_usd: Decimal
-    exit_reason: str
-
-    @property
-    def gross_pnl_usd(self) -> Decimal:
-        return self.size_usd * (self.exit_price - self.entry_price) / self.entry_price
-
-    @property
-    def net_pnl_usd(self) -> Decimal:
-        return self.gross_pnl_usd - self.fees_usd
-
-    @property
-    def is_win(self) -> bool:
-        """A win is net of costs. Gross wins that lose money are not wins."""
-        return self.net_pnl_usd > 0
 
 
 @dataclass
@@ -95,43 +79,28 @@ class BacktestResult:
 
     @property
     def gross_pnl_usd(self) -> Decimal:
-        return sum((t.gross_pnl_usd for t in self.trades), Decimal(0))
+        return gross_pnl(self.trades)
 
     @property
     def total_fees_usd(self) -> Decimal:
-        return sum((t.fees_usd for t in self.trades), Decimal(0))
+        return total_fees(self.trades)
 
     @property
     def net_pnl_usd(self) -> Decimal:
-        return self.gross_pnl_usd - self.total_fees_usd
+        return net_pnl(self.trades)
 
     @property
     def expectancy_usd(self) -> Decimal:
         """Average net P&L per trade — the validation gate's number."""
-        if not self.trades:
-            return Decimal(0)
-        return self.net_pnl_usd / Decimal(self.trade_count)
+        return expectancy(self.trades)
 
     @property
     def win_rate_pct(self) -> Decimal:
-        if not self.trades:
-            return Decimal(0)
-        wins = sum(1 for t in self.trades if t.is_win)
-        return Decimal(wins) / Decimal(self.trade_count) * HUNDRED
+        return win_rate_pct(self.trades)
 
     @property
     def max_drawdown_pct(self) -> Decimal:
-        """Largest peak-to-trough decline of the equity curve."""
-        if not self.equity_curve:
-            return Decimal(0)
-        peak = self.equity_curve[0]
-        worst = Decimal(0)
-        for equity in self.equity_curve:
-            peak = max(peak, equity)
-            if peak > 0:
-                drawdown = (peak - equity) / peak * HUNDRED
-                worst = max(worst, drawdown)
-        return worst
+        return max_drawdown_pct(self.equity_curve)
 
     @property
     def final_equity_usd(self) -> Decimal:

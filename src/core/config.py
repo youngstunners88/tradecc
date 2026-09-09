@@ -123,6 +123,28 @@ class DataConfig(StrictModel):
         return value
 
 
+class PaperConfig(StrictModel):
+    """Paper-mode wiring: what to poll, and what to price against.
+
+    Paper mode uses real quotes, so it needs a real quote asset and a real
+    pool to read candles from. Nothing here can cause a send.
+    """
+
+    # USDC on Solana — the asset positions are denominated in.
+    quote_mint: str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    quote_mint_decimals: int = 6
+    # GeckoTerminal pool address for candle polling.
+    pool_address: str = ""
+    poll_seconds: int = 300
+
+    @field_validator("quote_mint_decimals", "poll_seconds")
+    @classmethod
+    def _positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("must be greater than zero")
+        return value
+
+
 class BacktestConfig(StrictModel):
     """Backtest-only assumptions.
 
@@ -235,6 +257,7 @@ class RunConfig(StrictModel):
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     costs: CostsConfig = Field(default_factory=CostsConfig)
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
+    paper: PaperConfig = Field(default_factory=PaperConfig)
     state_dir: Path = Path("ops/.state")
     gate_file: Path = Path("ops/live-gate.json")
 

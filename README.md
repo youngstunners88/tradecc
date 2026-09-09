@@ -21,15 +21,54 @@ before any code that can touch the network or a wallet.
 | 2 | Execution layer: mock, fill simulator, Helius + Jupiter (read-only) | ✅ Done |
 | 3 | Momentum strategy module | ✅ Done |
 | 4 | Backtest mode (GeckoTerminal data, net-of-fees reporting) | ✅ Done |
-| 5 | Paper mode wiring | ⬜ Next |
-| 6 | Live execution, gated | ⬜ |
+| 5 | Paper mode + CLI | ✅ Done |
+| 6 | Live execution, gated | ⬜ Next |
 | 7 | Ops, monitoring, deploy | ⬜ |
 
-There is currently **no CLI entrypoint and no wallet handling.** The
+There is currently **no wallet handling and no live execution.** The
 execution layer is read-only: it fetches quotes and RPC state, and there
 is no code path that builds, signs, or sends a transaction. Both client
 classes have a test asserting their public surface, so adding a `send`
 method fails the suite rather than slipping in quietly.
+
+## Usage
+
+```bash
+PYTHONPATH=src python -m cli backtest --config config.backtest.yaml
+PYTHONPATH=src python -m cli backtest --report sol-usdc-1h   # writes a report
+PYTHONPATH=src python -m cli paper --once                    # one decision cycle
+PYTHONPATH=src python -m cli paper                           # run the 30-day session
+PYTHONPATH=src python -m cli gate                            # why is live locked?
+PYTHONPATH=src python -m cli live                            # refuses; exit code 2
+```
+
+## Paper mode
+
+Paper mode is the same loop live mode will run, with exactly one
+difference: the fill is simulated instead of signed. Candles, strategy,
+**real Jupiter quotes**, and the full risk engine are identical. That is
+what makes 30 days of paper evidence about the live system rather than
+about a friendlier imitation of it.
+
+- **The session survives restarts.** `elapsed_days` is measured from the
+  first start, never the last, so a VPS reboot on day 19 does not restart
+  the validation clock. Open position, trade journal, and funded mints
+  all persist; a tick is saved immediately, so a crash loses at most one
+  decision.
+- **A corrupt session file refuses to start** rather than silently
+  beginning a fresh 30-day clock over evidence the gate depends on.
+- **Changing token or strategy mid-session is refused** — it would make
+  the gate's evidence ambiguous.
+- **Provider failures don't end the session.** A bad afternoon at
+  GeckoTerminal or Jupiter is returned as a `TickResult`, logged as
+  `rpc.failure`, and the loop continues.
+- **Circuit-breaker state persists across restarts** here, the opposite
+  of the backtest requirement — killing the process must not clear a halt.
+
+Paper and backtest compute expectancy, win rate and drawdown with the
+**same code** (`core/performance.py`). Two implementations would
+eventually disagree, and the disagreement would show up as a strategy
+passing the gate on arithmetic rather than performance.
 
 ## The execution seam
 
@@ -267,9 +306,14 @@ SOL/USDC, 1h candles, ~6 weeks, default parameters, $10 positions:
 
 The strategy is *gross* profitable and *net* unprofitable: costs are
 1.4× the gross edge. That is the entire thesis of this project in one
-line, and it does not clear the validation gate. Parameters and interval
-have not been tuned — that is Stage 5+ work, and must not be tuned on
-this same data.
+line, and it does not clear the validation gate.
+
+On **15m candles over the same pool** it is worse still — 23 trades,
+gross −$2.14, net −$2.59, 17.4% win rate. Trading more often on this
+strategy buys more fees, not more edge.
+
+Parameters and interval have not been tuned. When they are, it must not
+be on this same data.
 
 ## Provider rate limits
 
