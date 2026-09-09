@@ -304,16 +304,34 @@ SOL/USDC, 1h candles, ~6 weeks, default parameters, $10 positions:
 | Win rate (net) | 40% |
 | Max drawdown | 1.24% |
 
-The strategy is *gross* profitable and *net* unprofitable: costs are
-1.4× the gross edge. That is the entire thesis of this project in one
-line, and it does not clear the validation gate.
+The strategy is gross profitable and net unprofitable here. On **15m
+candles** it is worse still — 23 trades, gross −$2.14, net −$2.59, 17.4%
+win rate.
 
-On **15m candles over the same pool** it is worse still — 23 trades,
-gross −$2.14, net −$2.59, 17.4% win rate. Trading more often on this
-strategy buys more fees, not more edge.
+> **Correction (later, from the parameter sweep):** an earlier version of
+> this README said fixed costs were ~1.4× the gross edge and dominated at
+> $10. That was wrong. Most of the "fees" figure is the **one-time,
+> refundable** token-account rent amortised over very few trades. The
+> genuinely recurring drag is **slippage at ~0.6% per round trip, about
+> 30× the recurring fees** — and slippage is proportional to size, so
+> trading bigger does not remove it. See
+> `research/backtests/2026-09-09_momentum_parameter-sweep-holdout.md`.
 
-Parameters and interval have not been tuned. When they are, it must not
-be on this same data.
+### Parameter sweep and held-out validation
+
+A 144-combination sweep per interval was run on a tuning range, with the
+split fixed in a decision record beforehand
+(`planning/decisions/2026-09-09-tuning-holdout-split.md`).
+
+**Result: no net edge at $10 on held-out data.** 1h collapsed from +$0.86
+tuning to −$0.66 held-out. 4h was nominally +$0.47 but on 3 trades at a
+33% win rate — one trade carried it. 78–88% of the parameter space lost
+money even on the range it was tuned on, so picking the maximum was
+selection bias, and the held-out numbers are what that looks like when
+checked.
+
+Per the stopping rule fixed in advance, the search stopped there rather
+than widening the grid.
 
 ## Provider rate limits
 
