@@ -23,9 +23,29 @@ because nothing is reporting, which is worse than no dashboard.
 trade — a trade blocked by three controls emits three events, so a query
 for "how often did the slippage cap bite" stays accurate.
 
+## The wallet address is never sent (decided 2026-09-09)
+
+Settled in `planning/decisions/2026-09-09-stage2-provider-tiers.md`: the
+wallet address is sensitive for this project and must not appear in any
+PostHog event property.
+
+- `distinct_id` is the constant `"tradecc-bot"` — never a wallet address.
+- Use `tx_signature` when an event needs to correlate to a specific
+  transaction. It is equally public but identifies one transaction rather
+  than the account behind all of them.
+- The address stays in local structured logs only.
+
+This is enforced in code by `core.telemetry.for_telemetry()`, which drops
+wallet-identifying fields from the telemetry copy of a payload after
+redaction. Adding a property named `wallet_address`, `pubkey`,
+`public_key`, `owner_address`, or similar will therefore be dropped
+silently before send — do not work around it, and do not rename a field
+to smuggle the value past the filter.
+
 ## Adding a new event
 1. Add the row here first.
 2. Confirm every property is either non-sensitive (token symbol, dollar
    amounts, public tx signatures) or has been redaction-checked.
-3. Implement using the `log_and_track` wrapper — never call
+3. Confirm it carries no wallet address under any name — see above.
+4. Implement using the `log_and_track` wrapper — never call
    `posthog.capture` directly from a new call site.

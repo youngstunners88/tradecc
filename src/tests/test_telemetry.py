@@ -84,6 +84,51 @@ def test_sink_failure_does_not_propagate():
     log_and_track("risk.daily_halt_triggered", realized_loss_usd=Decimal("20"))
 
 
+@pytest.mark.parametrize(
+    "field", ["wallet_address", "wallet_pubkey", "owner_address", "pubkey", "public_key"]
+)
+def test_wallet_identifiers_are_withheld_from_posthog(field):
+    """Public on-chain data, but it links the whole trading history to one
+    identity in a third party's system. It stays local."""
+    sink = FakeSink()
+    configure_telemetry(sink=sink)
+
+    log_and_track("trade.executed", **{field: "7xKq...", "token": "So111"})
+
+    _, _, properties = sink.events[0]
+    assert field not in properties
+    assert properties["token"] == "So111"
+
+
+def test_withheld_fields_still_reach_the_local_log(caplog):
+    configure_telemetry(sink=FakeSink())
+
+    with caplog.at_level("INFO", logger="tradecc.telemetry"):
+        log_and_track("trade.executed", wallet_address="7xKqABC")
+
+    assert getattr(caplog.records[0], "wallet_address") == "7xKqABC"
+
+
+def test_tx_signature_is_the_correlation_key_and_is_sent():
+    sink = FakeSink()
+    configure_telemetry(sink=sink)
+
+    log_and_track("trade.executed", tx_signature="5Nx...", wallet_address="7xKq...")
+
+    _, _, properties = sink.events[0]
+    assert properties["tx_signature"] == "5Nx..."
+    assert "wallet_address" not in properties
+
+
+def test_distinct_id_is_the_bot_not_a_wallet():
+    sink = FakeSink()
+    configure_telemetry(sink=sink)
+
+    log_and_track("trade.executed", token="So111")
+
+    assert sink.events[0][0] == "tradecc-bot"
+
+
 def test_disabled_telemetry_still_returns_redacted_payload():
     telemetry = Telemetry(sink=None)
 

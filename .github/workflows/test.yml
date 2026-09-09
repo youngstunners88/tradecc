@@ -64,4 +64,8 @@ jobs:
         # cov-fail-under is the enforced floor. Move it upward only, and
         # only with the user's agreement — never lower it silently to make
         # a red build go green.
-        run: pytest --cov=src --cov-report=term-missing --cov-fail-under=93
+        #
+        # `-m "not network"` is explicit here as well as in pyproject.toml:
+        # PR CI must never depend on a third-party API being up. Network
+        # contract tests run on their own schedule (contract-tests.yml).
+        run: pytest -m "not network" --cov=src --cov-report=term-missing --cov-fail-under=93

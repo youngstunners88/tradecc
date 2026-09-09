@@ -22,6 +22,35 @@ logger = get_logger("tradecc.telemetry")
 
 DEFAULT_DISTINCT_ID = "tradecc-bot"
 
+# Fields that stay local: written to structured logs, never sent off-box.
+#
+# The wallet address is not a secret in the way a private key is — it is
+# public on-chain data. It is withheld anyway because shipping it to a
+# third party links this bot's whole trading history to one identity in
+# someone else's system. `tx_signature` is the correlation key for
+# telemetry instead: equally public, but it identifies one transaction
+# rather than the account behind all of them.
+#
+# Redaction (core.logging.redact) still runs first; this is a further
+# narrowing applied only to the telemetry copy, never to the log copy.
+TELEMETRY_WITHHELD_FIELD_HINTS = (
+    "wallet_address",
+    "wallet_pubkey",
+    "owner_address",
+    "pubkey",
+    "public_key",
+)
+
+
+def _is_withheld_from_telemetry(key: str) -> bool:
+    lowered = key.lower()
+    return any(hint in lowered for hint in TELEMETRY_WITHHELD_FIELD_HINTS)
+
+
+def for_telemetry(payload: dict[str, Any]) -> dict[str, Any]:
+    """Drop locals-only fields from an already-redacted payload."""
+    return {k: v for k, v in payload.items() if not _is_withheld_from_telemetry(k)}
+
 
 class EventSink(Protocol):
     """Minimal sink interface. `PostHogSink` is the real one; tests use a fake."""
@@ -69,7 +98,11 @@ class Telemetry:
         return self._sink is not None
 
     def track(self, event: str, level: int = 20, **properties: Any) -> dict[str, Any]:
-        """Redact once, then log and send the identical payload.
+        """Redact once, log it, then send the same payload minus locals-only fields.
+
+        Both copies come from a single `redact()` call, so telemetry can
+        never carry something the log would have masked. The telemetry copy
+        is then narrowed further — see TELEMETRY_WITHHELD_FIELD_HINTS.
 
         A sink failure must never interrupt trading: PostHog being down is
         an observability problem, not a reason to stop managing a position.
@@ -79,7 +112,7 @@ class Telemetry:
 
         if self._sink is not None:
             try:
-                self._sink.capture(self._distinct_id, event, payload)
+                self._sink.capture(self._distinct_id, event, for_telemetry(payload))
             except Exception as exc:  # noqa: BLE001 - telemetry must not raise
                 logger.warning(
                     "telemetry_capture_failed",

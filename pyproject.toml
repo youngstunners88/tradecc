@@ -24,7 +24,13 @@ package-dir = { "" = "src" }
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["src/tests"]
-addopts = "-q"
+# Network contract tests are excluded by default: the unit suite must pass
+# offline and must never fail because a third party had a bad afternoon.
+# They run on their own schedule — see .github/workflows/contract-tests.yml.
+addopts = "-q -m 'not network'"
+markers = [
+    "network: hits a real external API (Jupiter, Helius, GeckoTerminal). Excluded from the default run and from PR CI; run with `-m network`.",
+]
 
 [tool.coverage.run]
 source = ["src"]

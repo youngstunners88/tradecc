@@ -123,11 +123,43 @@ class DataConfig(StrictModel):
         return value
 
 
+class ProvidersConfig(StrictModel):
+    """External provider endpoints and their client-side rate limits.
+
+    Every one of these is a free tier, so every one gets limited on our
+    side. Limits are configured, never assumed — see the decision record
+    `planning/decisions/2026-09-09-stage2-provider-tiers.md`.
+    """
+
+    # Jupiter's free public host. `api.jup.ag` is the keyed tier; switching
+    # to it is a deliberate config change, not a silent fallback.
+    jupiter_base_url: str = "https://lite-api.jup.ag"
+    jupiter_max_requests_per_minute: int = 60
+
+    helius_base_url: str = "https://mainnet.helius-rpc.com"
+    helius_max_requests_per_minute: int = 60
+
+    @field_validator("jupiter_max_requests_per_minute", "helius_max_requests_per_minute")
+    @classmethod
+    def _positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("must be greater than zero")
+        return value
+
+    @field_validator("jupiter_base_url", "helius_base_url")
+    @classmethod
+    def _must_be_https(cls, value: str) -> str:
+        if not value.startswith("https://"):
+            raise ValueError("provider base URL must use https")
+        return value.rstrip("/")
+
+
 class RunConfig(StrictModel):
     mode: Mode
     risk: RiskConfig = Field(default_factory=RiskConfig)
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
     data: DataConfig = Field(default_factory=DataConfig)
+    providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     state_dir: Path = Path("ops/.state")
     gate_file: Path = Path("ops/live-gate.json")
 

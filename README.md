@@ -131,12 +131,46 @@ Events currently wired: `risk.blocked` (one per rejection reason),
 schema is marked pending until its call site exists — see
 `.claude/skills/posthog-observability/references/event-schema.md`.
 
+**The wallet address is never sent to PostHog.** It is public on-chain
+data, but shipping it to a third party links this bot's whole trading
+history to one identity in someone else's system. `distinct_id` is the
+constant `tradecc-bot`; `tx_signature` is the correlation key when an
+event needs to point at a specific transaction; the address itself stays
+in local logs. Enforced by `core.telemetry.for_telemetry()`.
+
 ## CI
 
-`.github/workflows/test.yml` runs the suite on Python 3.11 and 3.12 for
-every PR into `main`, enforcing a **93% coverage floor** (current: 94%).
-The floor moves up, never quietly down. A PR-only regex scan for
-secret-shaped strings runs as a second net beyond the app's own redaction.
+Two workflows, deliberately separated:
+
+| Workflow | Trigger | Gates a PR? |
+|---|---|---|
+| `test.yml` | Every PR into `main`, push to `main` | **Yes** |
+| `contract-tests.yml` | Daily 06:15 UTC + manual dispatch | **No** |
+
+`test.yml` runs the suite on Python 3.11 and 3.12 and enforces a **93%
+coverage floor** (current: 94%). The floor moves up, never quietly down.
+A PR-only regex scan for secret-shaped strings runs as a second net
+beyond the app's own redaction.
+
+`contract-tests.yml` runs the `@pytest.mark.network` tests against real
+provider APIs. It is a **drift detector, not a merge gate** — a third
+party's outage says nothing about whether your diff is correct, and a CI
+gate that fails for reasons the author cannot fix teaches people to
+ignore CI. Network tests are excluded from the default `pytest` run, so
+the unit suite always passes offline.
+
+## Provider rate limits
+
+Every provider is on a free tier, and every one is rate-limited on our
+side before the request goes out — free tiers return 429s rather than
+failing politely, and discovering a limit mid-position is the worst time
+to find it. `core/rate_limit.py` is a sliding-window limiter (fixed
+windows permit a double-rate burst across the boundary) shared by all
+provider clients.
+
+Jupiter targets the free public host `lite-api.jup.ag`. Moving to the
+keyed `api.jup.ag` is a deliberate config change, never a silent fallback
+when the free tier throttles.
 
 ## Still open before the paper run
 

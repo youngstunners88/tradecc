@@ -7,7 +7,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from core.config import RiskConfig, load_config
+from core.config import ProvidersConfig, RiskConfig, load_config
 from core.types import Mode
 
 BASE = {
@@ -118,6 +118,48 @@ def test_unknown_config_keys_are_rejected():
     """A typo'd risk limit must fail loudly, not be silently ignored."""
     with pytest.raises(ValidationError):
         RiskConfig(max_slipage_pct=Decimal("5"))
+
+
+def test_providers_default_to_jupiter_free_tier():
+    """The keyed host must be a deliberate config change, not a fallback."""
+    providers = ProvidersConfig()
+
+    assert providers.jupiter_base_url == "https://lite-api.jup.ag"
+    assert providers.jupiter_max_requests_per_minute > 0
+    assert providers.helius_max_requests_per_minute > 0
+
+
+@pytest.mark.parametrize(
+    "field", ["jupiter_max_requests_per_minute", "helius_max_requests_per_minute"]
+)
+def test_provider_rate_limits_must_be_positive(field):
+    with pytest.raises(ValidationError):
+        ProvidersConfig(**{field: 0})
+
+
+@pytest.mark.parametrize("field", ["jupiter_base_url", "helius_base_url"])
+def test_provider_urls_must_be_https(field):
+    with pytest.raises(ValidationError, match="https"):
+        ProvidersConfig(**{field: "http://insecure.example.com"})
+
+
+@pytest.mark.parametrize("field", ["jupiter_base_url", "helius_base_url"])
+def test_provider_urls_are_normalised(field):
+    providers = ProvidersConfig(**{field: "https://example.com/"})
+
+    assert getattr(providers, field) == "https://example.com"
+
+
+def test_providers_load_from_yaml(tmp_path):
+    config = load_config(
+        write_config(
+            tmp_path / "c.yaml",
+            providers={"jupiter_max_requests_per_minute": 30},
+        ),
+        env={},
+    )
+
+    assert config.providers.jupiter_max_requests_per_minute == 30
 
 
 def test_shipped_configs_are_valid():
