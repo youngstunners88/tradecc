@@ -1,0 +1,16 @@
+.env
+*.env
+!*.env.example
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+
+# Runtime state and caches. Risk state is per-host operational data, not
+# source — but never delete it on a live host to clear a circuit breaker.
+ops/.state/
+research/.candle-cache/
+.coverage
+.pytest_cache/
+*.egg-info/
