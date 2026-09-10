@@ -1,6 +1,7 @@
 # OpenRouter model snapshot for TradeCC
 
-Verified against `https://openrouter.ai/api/v1/models` on **2026-09-09**.
+Verified against `https://openrouter.ai/api/v1/models` on **2026-09-09**,
+re-verified **2026-09-10** — all four IDs, contexts, and prices unchanged.
 Treat this as a snapshot, not a source of truth — the catalogue changes,
 and a model ID that no longer exists fails at runtime. Re-verify before
 relying on any row.
