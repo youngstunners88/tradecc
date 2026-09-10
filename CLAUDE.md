@@ -25,9 +25,19 @@ decisions that contradict it.
   interval. Do not tune it further and do not build live execution on it** —
   see `planning/decisions/2026-09-12-kill-ema-rsi-momentum.md`. The
   infrastructure built around it stands; the signal does not.
-- **Strategy v0.2 (later):** Copy-trading / wallet-following — the
-  execution and risk engine should be built so this can plug in without a
-  rewrite.
+- **Strategy v0.2 (greenlit 2026-09-10):** Copy-trading / wallet-following,
+  a live market-data layer, regime detection, and GPT-6 Astra as a
+  research analyst. Architecture and limits are fixed in
+  `planning/decisions/2026-09-10-v02-intelligence-architecture.md` — read
+  it before building any of them. Governing principle: **every new input
+  has refusal authority only.** It may cause a trade not to happen; it may
+  never cause a trade to happen. Copy-trading originates a `TradeIntent`
+  and goes through `RiskEngine.approve()` unchanged, like any other signal.
+  **Status 2026-09-13:** regime detection is refuted
+  (`2026-09-12-regime-detection-pre-registration.md`); copy-trading's
+  point-in-time-rigorous form is blocked on infeasible data infrastructure
+  (`2026-09-13-copy-trading-wallet-universe.md`); `astra-analyst` is the
+  only item still untested.
 - **Explicitly out of scope for v0.1:** sniping new launches, cross-DEX
   arbitrage. The research found both are structurally unfavorable for a
   small individual trader (professional/co-located competition, MEV,

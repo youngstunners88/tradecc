@@ -13,11 +13,15 @@ changing a string.
 
 TradeCC is a money-adjacent codebase. These are not style preferences:
 
-1. **No LLM in the trade-decision path for v0.1.** The strategy is
-   deterministic EMA/RSI precisely so it can be backtested and reproduced.
-   A model call in the signal path makes the backtest meaningless — you
-   cannot validate a strategy whose decisions are non-deterministic and
-   change under the vendor's silent model updates.
+1. **No LLM in the trade-decision path.** The strategy is deterministic
+   EMA/RSI precisely so it can be backtested and reproduced. A model call
+   in the signal path makes the backtest meaningless — you cannot
+   validate a strategy whose decisions are non-deterministic and change
+   under the vendor's silent model updates. **This still holds in v0.2.**
+   The v0.2 extension grants Astra research and *veto* authority only,
+   with every proposal frozen into deterministic code before it can
+   affect a trade — see the `astra-analyst` skill and
+   `planning/decisions/2026-09-10-v02-intelligence-architecture.md`.
 2. **An LLM never bypasses the risk engine.** If model output ever
    proposes a trade, it produces a `TradeIntent` that goes through
    `RiskEngine.approve()` like anything else. There is no "the model was
