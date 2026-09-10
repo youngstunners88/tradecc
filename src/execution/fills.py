@@ -26,8 +26,9 @@ class FillSimulator:
         size_usd: Decimal,
         at: datetime | None = None,
         creates_token_account: bool = False,
+        sol_price_usd: Decimal | None = None,
     ) -> Fill:
-        costs = self.estimate_costs(size_usd, creates_token_account)
+        costs = self.estimate_costs(size_usd, creates_token_account, sol_price_usd)
         return Fill(
             token_mint=quote.token_mint,
             side=quote.side,
@@ -40,6 +41,11 @@ class FillSimulator:
         )
 
     def estimate_costs(
-        self, size_usd: Decimal, creates_token_account: bool = False
+        self,
+        size_usd: Decimal,
+        creates_token_account: bool = False,
+        sol_price_usd: Decimal | None = None,
     ) -> TradeCosts:
-        return self._cost_model.estimate(size_usd, creates_token_account)
+        return self._cost_model.estimate(
+            size_usd, creates_token_account, sol_price_usd=sol_price_usd
+        )

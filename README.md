@@ -93,8 +93,9 @@ optimistic simulation produces a validation gate that passes systems which
 then lose money live — the most expensive failure mode this project has.
 
 The cost model makes the small-size problem visible: on a $5 position that
-opens a new token account, fixed costs exceed **8% of the position** before
-the price moves at all.
+opens a new token account, fixed costs run to **~4% of the position** at
+SOL near $100 before the price moves at all — almost all of it the
+one-time, refundable account rent rather than a recurring fee.
 
 ## Setup
 
@@ -285,11 +286,21 @@ Candles are cached to disk, so a backtest is reproducible and runnable
 offline — re-running against silently different data is a good way to
 "discover" an improvement that is really just a different sample.
 
-**Slippage in backtests is assumed, not measured.** Historical candles
-carry no quotes. `BacktestConfig.assumed_slippage_pct` keeps the
-assumption explicit and configurable rather than buried where a
-favourable number could quietly flatter every result. Every report
-repeats this caveat.
+**Backtest slippage is half measured, half assumed — and the split is
+visible on purpose.** Historical candles carry no quotes, so the adverse
+move is still applied as a constant. But it is now two named constants
+with different epistemic status:
+
+- `price_impact_pct` is **calibrated from measurement** — Jupiter's
+  `priceImpactPct` at real size on a real route, sampled by
+  `research/calibrate_costs.py`.
+- `execution_slippage_pct` is **still assumed** — quote-to-fill drift,
+  which no historical measurement can supply.
+
+Keeping them apart means "how much of this is measured?" has an answer at
+a glance. It matters: the assumed half is currently ~23× the measured
+half, and it is the only cost input still able to flip the 1h result's
+sign on its own. Every report repeats the caveat.
 
 ### First real result (2026-09-09)
 
@@ -308,14 +319,24 @@ The strategy is gross profitable and net unprofitable here. On **15m
 candles** it is worse still — 23 trades, gross −$2.14, net −$2.59, 17.4%
 win rate.
 
-> **Correction (later, from the parameter sweep):** an earlier version of
-> this README said fixed costs were ~1.4× the gross edge and dominated at
-> $10. That was wrong. Most of the "fees" figure is the **one-time,
-> refundable** token-account rent amortised over very few trades. The
-> genuinely recurring drag is **slippage at ~0.6% per round trip, about
-> 30× the recurring fees** — and slippage is proportional to size, so
-> trading bigger does not remove it. See
-> `research/backtests/2026-09-09_momentum_parameter-sweep-holdout.md`.
+> **Superseded (2026-09-10, cost-model correction).** Both earlier
+> readings of this table were wrong, in opposite directions.
+>
+> The first said fixed costs were ~1.4× the gross edge. The second — from
+> the parameter sweep — replaced it with "slippage at ~0.6% per round
+> trip, about 30× the recurring fees." **That was wrong too, by about two
+> orders of magnitude.** Measured against Jupiter, real price impact on
+> SOL/USDC at $5–$200 is **0.000%–0.004%**; the 0.5% figure it was read
+> from is the slippage *tolerance* requested, not a cost incurred.
+>
+> Three other inputs were also wrong: SOL was hardcoded at $200 while
+> trading near $100, priority fees were modelled as a flat total rather
+> than per compute unit, and Jito tips were counted as zero. Corrected,
+> **1h moves to +$0.58 and 15m to −$1.78** — but the 1h result sits
+> inside the sensitivity band of the one slippage component still
+> assumed, and crosses zero at the old assumption. It is not evidence of
+> an edge. See
+> `research/backtests/2026-09-10_cost-model-correction.md`.
 
 ### Parameter sweep and held-out validation
 

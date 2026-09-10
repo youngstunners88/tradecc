@@ -148,17 +148,42 @@ class PaperConfig(StrictModel):
 class BacktestConfig(StrictModel):
     """Backtest-only assumptions.
 
-    `assumed_slippage_pct` is exactly what its name says: historical
-    candles carry no quotes, so backtest fills cannot measure slippage,
-    only assume it. Keeping the assumption explicit and configurable is
-    the honest option — burying it in code would let a favourable number
-    quietly flatter every result.
+    Adverse price movement is split into two components because they have
+    different epistemic status, and collapsing them into one number hid
+    that difference:
+
+    - `price_impact_pct` is **calibrated from measurement**. Jupiter's
+      quote reports `priceImpactPct` for a real size on a real route;
+      `research/calibrate_costs.py` samples it and prints the value to
+      put here. It is still applied as a constant to historical bars —
+      history carries no quotes — but it is a measured constant rather
+      than an invented one.
+    - `execution_slippage_pct` is **still an assumption**: drift between
+      the quote and the fill, which no historical measurement can supply.
+      A momentum strategy buys into rising prices, so this is adverse by
+      construction and the default stays deliberately pessimistic.
+
+    Keeping them separate means "how much of this is measured?" has an
+    answer at a glance. Fills use the sum, always applied adversely.
     """
 
     initial_capital_usd: Decimal = Decimal("100")
-    assumed_slippage_pct: Decimal = Decimal("0.3")
+    # Measured 2026-09-10: SOL/USDC impact was 0.0000%–0.0012% across
+    # $5–$200. Rounded up to 0.01% rather than modelled as free.
+    price_impact_pct: Decimal = Decimal("0.01")
+    execution_slippage_pct: Decimal = Decimal("0.10")
 
-    @field_validator("initial_capital_usd", "assumed_slippage_pct", mode="before")
+    @property
+    def total_adverse_pct(self) -> Decimal:
+        """Total adverse move per side — what a fill is actually marked at."""
+        return self.price_impact_pct + self.execution_slippage_pct
+
+    @field_validator(
+        "initial_capital_usd",
+        "price_impact_pct",
+        "execution_slippage_pct",
+        mode="before",
+    )
     @classmethod
     def _to_decimal(cls, value: Any) -> Decimal:
         try:
@@ -166,11 +191,20 @@ class BacktestConfig(StrictModel):
         except InvalidOperation as exc:
             raise ValueError(f"not a valid decimal: {value!r}") from exc
 
-    @field_validator("initial_capital_usd", "assumed_slippage_pct")
+    @field_validator("initial_capital_usd")
     @classmethod
     def _positive(cls, value: Decimal) -> Decimal:
         if value <= 0:
             raise ValueError("must be greater than zero")
+        return value
+
+    @field_validator("price_impact_pct", "execution_slippage_pct")
+    @classmethod
+    def _non_negative(cls, value: Decimal) -> Decimal:
+        # Zero is legitimate here — a deep pool genuinely measures at zero
+        # impact — but negative would mean fills improve on the quote.
+        if value < 0:
+            raise ValueError("must not be negative")
         return value
 
 
@@ -183,11 +217,25 @@ class CostsConfig(StrictModel):
     """
 
     base_fee_lamports: int = 5000
-    priority_fee_microlamports: int = 200_000
+    # Priority fees are quoted **per compute unit**, not as a flat total.
+    # Modelling them as a flat total understated them by roughly the size
+    # of the CU limit — five orders of magnitude — which is why this is
+    # now two fields that must be multiplied.
+    compute_unit_limit: int = 200_000
+    priority_fee_microlamports_per_cu: int = 200_000
+    # Jito tip for MEV-protected routing, which Solana swaps typically
+    # need and which was previously modelled as zero. Default is the
+    # landed-tip 75th percentile measured 2026-09-10 via
+    # https://bundles.jito.wtf/api/v1/bundles/tip_floor — refresh with
+    # research/calibrate_costs.py.
+    jito_tip_lamports: int = 17_392
     # Rent-exempt minimum for an SPL associated token account.
     ata_rent_lamports: int = 2_039_280
     platform_fee_bps: int = 0
-    # Placeholder until the data layer supplies a live SOL price (Stage 5).
+    # Fallback only. A hardcoded market price is wrong the day after it is
+    # written — this one said 200 while SOL traded at ~102. Prefer passing
+    # a live or per-bar price to `CostModel.estimate(sol_price_usd=...)`;
+    # this value is what remains when no price source is available.
     sol_price_usd: Decimal = Decimal("200")
 
     @field_validator("sol_price_usd", mode="before")
@@ -207,7 +255,8 @@ class CostsConfig(StrictModel):
 
     @field_validator(
         "base_fee_lamports",
-        "priority_fee_microlamports",
+        "priority_fee_microlamports_per_cu",
+        "jito_tip_lamports",
         "ata_rent_lamports",
         "platform_fee_bps",
     )
@@ -215,6 +264,15 @@ class CostsConfig(StrictModel):
     def _non_negative(cls, value: int) -> int:
         if value < 0:
             raise ValueError("must not be negative")
+        return value
+
+    @field_validator("compute_unit_limit")
+    @classmethod
+    def _cu_limit_positive(cls, value: int) -> int:
+        # A zero CU limit would silently zero the priority fee, which is
+        # the exact bug this field was added to fix.
+        if value <= 0:
+            raise ValueError("must be greater than zero")
         return value
 
 

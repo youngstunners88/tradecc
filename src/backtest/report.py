@@ -138,10 +138,13 @@ def render_report(
         "",
         "## Caveats",
         "",
-        "- Slippage is **assumed**, not measured: historical candles carry no "
-        "quotes. See `BacktestConfig.assumed_slippage_pct`.",
-        "- Fills are modelled at the adverse side of the assumed slippage on "
-        "both entry and exit.",
+        "- Adverse price movement is applied as a constant, because historical "
+        "candles carry no quotes. It splits into a **measured** price-impact "
+        "component (calibrated from Jupiter's `priceImpactPct` at real size — "
+        "see `research/calibrate_costs.py`) and an **assumed** "
+        "execution-slippage component. See `BacktestConfig`.",
+        "- Fills are modelled at the adverse side of that total on both entry "
+        "and exit.",
         "- A single backtest over one date range is weak evidence. Note why "
         "this range was chosen, and do not tune parameters on the same data "
         "used to evaluate them.",

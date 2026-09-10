@@ -167,3 +167,52 @@ def test_client_has_no_swap_or_send_method():
     surface = {name for name in dir(JupiterQuoteClient) if not name.startswith("_")}
 
     assert surface == {"get_quote", "get_quote_detailed"}
+
+
+def get_detailed(transport, payload_overrides=None):
+    return make_client(transport).get_quote_detailed(
+        input_mint=USDC,
+        output_mint=TOKEN,
+        amount_atomic=10_000_000,
+        slippage_bps=50,
+        amount_usd=Decimal("10"),
+    )
+
+
+def test_price_impact_is_parsed_as_a_percentage():
+    """Jupiter reports a fraction; the config's *_pct fields want percent."""
+    payload = {**QUOTE_PAYLOAD, "priceImpactPct": "0.0012"}
+
+    detailed = get_detailed(FakeTransport(response(200, payload)))
+
+    assert detailed.price_impact_pct == Decimal("0.12")
+
+
+def test_price_impact_is_distinct_from_the_slippage_tolerance():
+    """The gap to `otherAmountThreshold` is tolerance, not measured cost.
+
+    Conflating them is what made backtest slippage 250x the real number:
+    a 0.5% threshold gap is the worst case we asked to be protected to,
+    while measured impact on a deep pool is near zero.
+    """
+    payload = {**QUOTE_PAYLOAD, "priceImpactPct": "0"}
+
+    detailed = get_detailed(FakeTransport(response(200, payload)))
+
+    assert detailed.price_impact_pct == Decimal("0")
+    assert detailed.quote.worst_case_price > detailed.quote.expected_price
+
+
+def test_missing_price_impact_defaults_to_zero_rather_than_failing():
+    """It is optional; losing it must not take down a usable quote."""
+    detailed = get_detailed(FakeTransport(response(200, QUOTE_PAYLOAD)))
+
+    assert detailed.price_impact_pct == Decimal("0")
+    assert detailed.quote.worst_case_price > 0
+
+
+def test_non_numeric_price_impact_is_a_provider_error():
+    payload = {**QUOTE_PAYLOAD, "priceImpactPct": "not-a-number"}
+
+    with pytest.raises(ProviderError):
+        get_detailed(FakeTransport(response(200, payload)))

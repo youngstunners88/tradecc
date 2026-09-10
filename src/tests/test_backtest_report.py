@@ -110,7 +110,8 @@ def test_always_states_the_slippage_caveat():
     """The assumption must travel with the number it flatters."""
     report = render()
 
-    assert "Slippage is **assumed**, not measured" in report
+    assert "**measured** price-impact" in report
+    assert "**assumed**" in report
     assert "do not tune parameters on the same data" in report
 
 

@@ -27,7 +27,7 @@ from core.performance import ClosedTrade
 from core.telemetry import log_and_track
 from core.types import Candle, Mode, Position, Quote, Side, SignalType, TradeIntent
 from execution.client import QuoteSource
-from execution.costs import CostModel
+from execution.costs import CostModel, sol_price_from_close
 from execution.fills import FillSimulator
 from execution.http import ProviderError
 from paper.session import PaperSessionState, PaperSessionStore
@@ -126,7 +126,7 @@ class PaperTrader:
 
         try:
             if state.open_position is None:
-                return self._consider_entry(state, signal, moment)
+                return self._consider_entry(state, signal, price, moment)
             return self._consider_exit(state, signal, price, moment)
         except ProviderError as exc:
             log_and_track(
@@ -139,7 +139,7 @@ class PaperTrader:
             return TickResult(moment, "provider_error", signal=signal.type, error=str(exc))
 
     def _consider_entry(
-        self, state: PaperSessionState, signal, moment: datetime
+        self, state: PaperSessionState, signal, price: Decimal, moment: datetime
     ) -> TickResult:
         if signal.type is not SignalType.BUY:
             return TickResult(moment, "hold", signal=signal.type)
@@ -156,7 +156,11 @@ class PaperTrader:
 
         creates_account = state.token_mint not in state.funded_mints
         fill = self._fills.simulate(
-            quote, size_usd, at=moment, creates_token_account=creates_account
+            quote,
+            size_usd,
+            at=moment,
+            creates_token_account=creates_account,
+            sol_price_usd=sol_price_from_close(state.token_mint, price),
         )
         state.funded_mints.add(state.token_mint)
         state.open_position = Position(
@@ -197,7 +201,11 @@ class PaperTrader:
 
         quote = self._live_quote(state.token_mint, Side.SELL, position.size_usd)
         fill = self._fills.simulate(
-            quote, position.size_usd, at=moment, creates_token_account=False
+            quote,
+            position.size_usd,
+            at=moment,
+            creates_token_account=False,
+            sol_price_usd=sol_price_from_close(state.token_mint, price),
         )
         trade = ClosedTrade(
             token_mint=position.token_mint,

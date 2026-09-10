@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import urllib.parse
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from core.config import ProvidersConfig
@@ -39,6 +39,13 @@ class JupiterQuote:
 
     quote: Quote
     raw: dict[str, Any]
+    # The route's expected price impact for this size, as a percentage.
+    # This is the *measured* cost of depth, and it is not the same thing as
+    # `worst_case_price`: that reflects the slippage tolerance we asked
+    # for, which bounds the downside but is not what a fill is expected to
+    # cost. Backtest slippage is calibrated from this — see
+    # research/calibrate_costs.py.
+    price_impact_pct: Decimal = Decimal("0")
 
 
 class JupiterQuoteClient:
@@ -133,7 +140,33 @@ class JupiterQuoteClient:
             fee_usd=Decimal("0"),
             source=PROVIDER,
         )
-        return JupiterQuote(quote=quote, raw=payload)
+        return JupiterQuote(
+            quote=quote,
+            raw=payload,
+            price_impact_pct=_price_impact_pct(payload),
+        )
+
+
+def _price_impact_pct(payload: dict[str, Any]) -> Decimal:
+    """Parse `priceImpactPct`, defaulting to zero when absent.
+
+    Absent is treated as zero rather than as an error: it is an optional
+    field, and a missing one must not take down a quote the risk engine
+    could still evaluate through `worst_case_price`. Parsed via `str` so a
+    float in the payload does not import binary rounding error.
+    """
+    raw = payload.get("priceImpactPct")
+    if raw is None:
+        return Decimal("0")
+    try:
+        impact = Decimal(str(raw))
+    except InvalidOperation:
+        raise ProviderError(
+            PROVIDER, f"priceImpactPct was not a number: {raw!r}"
+        ) from None
+    # Jupiter reports a fraction (0.0012 = 0.12%); express it as a percent
+    # so it is directly comparable to the config's *_pct fields.
+    return impact * Decimal(100)
 
 
 def _required_int(payload: dict[str, Any], key: str) -> int:

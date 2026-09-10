@@ -43,7 +43,9 @@ def config(tmp_path) -> RunConfig:
         ),
         costs=CostsConfig(sol_price_usd=Decimal("200")),
         backtest=BacktestConfig(
-            initial_capital_usd=Decimal("100"), assumed_slippage_pct=Decimal("0.3")
+            initial_capital_usd=Decimal("100"),
+            price_impact_pct=Decimal("0.0"),
+            execution_slippage_pct=Decimal("0.3"),
         ),
         state_dir=tmp_path / "state",
         gate_file=tmp_path / "gate.json",

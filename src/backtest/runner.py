@@ -46,7 +46,7 @@ from core.performance import (
     total_fees,
     win_rate_pct,
 )
-from execution.costs import CostModel
+from execution.costs import CostModel, sol_price_from_close
 from execution.fills import FillSimulator
 from risk.engine import RiskEngine
 from risk.state import InMemoryRiskStateStore
@@ -208,7 +208,11 @@ class BacktestRunner:
 
         creates_account = signal.token_mint not in funded_mints
         fill = self._fills.simulate(
-            quote, size_usd, at=candle.timestamp, creates_token_account=creates_account
+            quote,
+            size_usd,
+            at=candle.timestamp,
+            creates_token_account=creates_account,
+            sol_price_usd=self._sol_price_at(signal.token_mint, candle),
         )
         funded_mints.add(signal.token_mint)
         position = Position(
@@ -243,6 +247,7 @@ class BacktestRunner:
             position.size_usd,
             at=candle.timestamp,
             creates_token_account=False,
+            sol_price_usd=self._sol_price_at(position.token_mint, candle),
         )
         return ClosedTrade(
             token_mint=position.token_mint,
@@ -255,20 +260,25 @@ class BacktestRunner:
             exit_reason=reason,
         )
 
+    def _sol_price_at(self, token_mint: str, candle: Candle) -> Decimal | None:
+        return sol_price_from_close(token_mint, candle.close)
+
     def _synthetic_quote(
         self, token_mint: str, candle: Candle, side: Side, size_usd: Decimal
     ) -> Quote:
         """A quote reconstructed from a historical candle.
 
-        Historical bars carry no quotes, so slippage is assumed rather than
-        measured — see `BacktestConfig.assumed_slippage_pct`. The assumption
-        is always applied adversely: buys fill higher, sells fill lower.
+        Historical bars carry no quotes, so the adverse move is applied as
+        a constant — but it is now the sum of a *measured* price-impact
+        component and an assumed execution-slippage one, rather than a
+        single invented number. See `BacktestConfig`. Always applied
+        adversely: buys fill higher, sells fill lower.
         """
-        slippage = self._config.backtest.assumed_slippage_pct / HUNDRED
+        adverse = self._config.backtest.total_adverse_pct / HUNDRED
         if side is Side.BUY:
-            worst_case = candle.close * (Decimal(1) + slippage)
+            worst_case = candle.close * (Decimal(1) + adverse)
         else:
-            worst_case = candle.close * (Decimal(1) - slippage)
+            worst_case = candle.close * (Decimal(1) - adverse)
         return Quote(
             token_mint=token_mint,
             side=side,
@@ -280,5 +290,5 @@ class BacktestRunner:
         )
 
     def _exit_price(self, candle: Candle) -> Decimal:
-        slippage = self._config.backtest.assumed_slippage_pct / HUNDRED
-        return candle.close * (Decimal(1) - slippage)
+        adverse = self._config.backtest.total_adverse_pct / HUNDRED
+        return candle.close * (Decimal(1) - adverse)

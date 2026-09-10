@@ -23,7 +23,9 @@ TOKEN = "So11111111111111111111111111111111111111112"
 def costs_config() -> CostsConfig:
     return CostsConfig(
         base_fee_lamports=5000,
-        priority_fee_microlamports=200_000,
+        compute_unit_limit=200_000,
+        priority_fee_microlamports_per_cu=200_000,
+        jito_tip_lamports=17_392,
         ata_rent_lamports=2_039_280,
         platform_fee_bps=0,
         sol_price_usd=Decimal("200"),
@@ -42,11 +44,48 @@ def test_network_fee_converts_lamports_to_usd(model):
     assert costs.network_fee_usd == Decimal("0.001")
 
 
-def test_priority_fee_converts_microlamports(model):
+def test_priority_fee_is_per_compute_unit_not_a_flat_total(model):
+    """The bug this replaced: a flat reading understated the fee ~200,000x.
+
+    200_000 CU x 200_000 microlamports/CU = 4e10 microlamports = 40,000
+    lamports = 4e-5 SOL, which is $0.008 at $200/SOL. Read as a flat
+    total the same config produced $0.00000004.
+    """
     costs = model.estimate(Decimal("10"))
 
-    # 200_000 microlamports = 0.2 lamports = 4e-8 USD at $200/SOL.
-    assert costs.priority_fee_usd == Decimal("0.00000004")
+    assert model.priority_fee_lamports() == Decimal("40000")
+    assert costs.priority_fee_usd == Decimal("0.008")
+
+
+def test_jito_tip_is_modelled_rather_than_assumed_free(model):
+    # 17_392 lamports = 1.7392e-5 SOL; at $200 that is $0.0034784.
+    costs = model.estimate(Decimal("10"))
+
+    assert costs.jito_tip_usd == Decimal("0.0034784")
+    assert costs.jito_tip_usd > 0
+
+
+def test_sol_price_override_reprices_every_sol_denominated_cost(model):
+    """A stale SOL price misprices all of them at once, in one direction."""
+    at_200 = model.estimate(Decimal("10"), creates_token_account=True)
+    at_100 = model.estimate(
+        Decimal("10"), creates_token_account=True, sol_price_usd=Decimal("100")
+    )
+
+    assert at_100.network_fee_usd == at_200.network_fee_usd / 2
+    assert at_100.priority_fee_usd == at_200.priority_fee_usd / 2
+    assert at_100.jito_tip_usd == at_200.jito_tip_usd / 2
+    assert at_100.account_rent_usd == at_200.account_rent_usd / 2
+    assert at_100.sol_price_usd == Decimal("100")
+
+
+def test_recurring_cost_excludes_the_refundable_rent_deposit(model):
+    """Rent is a one-time refundable deposit, not a per-trade fee."""
+    costs = model.estimate(Decimal("10"), creates_token_account=True)
+
+    assert costs.account_rent_usd > 0
+    assert costs.recurring_usd == costs.total_usd - costs.account_rent_usd
+    assert costs.recurring_usd < costs.total_usd
 
 
 def test_no_account_rent_when_the_account_exists(model):
@@ -54,13 +93,21 @@ def test_no_account_rent_when_the_account_exists(model):
 
 
 def test_account_rent_dominates_at_small_sizes(model):
-    """The first trade in a new mint is far more expensive than the rest."""
+    """The first trade in a new mint is far more expensive than the rest.
+
+    The margin narrowed sharply once priority fees were modelled per
+    compute unit and Jito tips stopped being counted as zero: rent used
+    to be >400x a recurring transaction and is now ~33x. Rent is still
+    the largest single line, but it is one-time and refundable, whereas
+    the recurring costs are neither.
+    """
     fresh = model.estimate(Decimal("10"), creates_token_account=True)
     existing = model.estimate(Decimal("10"), creates_token_account=False)
 
-    # ~0.00204 SOL at $200 = ~$0.41, versus a tenth of a cent otherwise.
+    # ~0.00204 SOL at $200 = ~$0.41.
     assert fresh.account_rent_usd == Decimal("0.40785600")
-    assert fresh.total_usd > existing.total_usd * 400
+    assert fresh.total_usd > existing.total_usd * 30
+    assert fresh.total_usd < existing.total_usd * 40
 
 
 def test_cost_as_percentage_of_a_small_position(model):
@@ -80,11 +127,14 @@ def test_total_sums_every_component():
     costs = TradeCosts(
         network_fee_usd=Decimal("0.001"),
         priority_fee_usd=Decimal("0.002"),
+        jito_tip_usd=Decimal("0.004"),
         account_rent_usd=Decimal("0.4"),
         platform_fee_usd=Decimal("0.02"),
+        sol_price_usd=Decimal("100"),
     )
 
-    assert costs.total_usd == Decimal("0.423")
+    assert costs.total_usd == Decimal("0.427")
+    assert costs.recurring_usd == Decimal("0.027")
 
 
 @pytest.mark.parametrize("size", ["0", "-5"])
