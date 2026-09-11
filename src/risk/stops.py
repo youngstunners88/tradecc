@@ -33,6 +33,28 @@ class StopEvaluation:
         return self.action is not StopAction.HOLD
 
 
+HUNDRED = Decimal(100)
+
+
+def stop_loss_price(position: Position, config: RiskConfig) -> Decimal:
+    """The price at which this position's stop-loss triggers.
+
+    Exposed so a bar-based simulation can ask "did the market touch this
+    level?" against the bar's low, rather than only against its close.
+    Checking the close alone silently ignores stops that were hit intrabar
+    and recovered, which flatters the strategy.
+    """
+    return position.entry_price * (
+        Decimal(1) - config.per_trade_stop_loss_pct / HUNDRED
+    )
+
+
+def take_profit_price(position: Position, config: RiskConfig) -> Decimal:
+    return position.entry_price * (
+        Decimal(1) + config.per_trade_take_profit_pct / HUNDRED
+    )
+
+
 def evaluate_stops(
     position: Position, current_price: Decimal, config: RiskConfig
 ) -> StopEvaluation:

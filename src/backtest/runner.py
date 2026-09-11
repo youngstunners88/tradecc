@@ -25,6 +25,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Sequence
 
+from core.candles import interval_duration
 from core.config import RunConfig
 from core.logging import get_logger
 from core.types import (
@@ -50,7 +51,7 @@ from execution.costs import CostModel, sol_price_from_close
 from execution.fills import FillSimulator
 from risk.engine import RiskEngine
 from risk.state import InMemoryRiskStateStore
-from risk.stops import StopAction
+from risk.stops import StopAction, stop_loss_price, take_profit_price
 from strategy.base import Strategy
 
 logger = get_logger("tradecc.backtest")
@@ -116,6 +117,11 @@ class BacktestRunner:
         self._config = config
         self._strategy = strategy
         self._fills = FillSimulator(CostModel(config.costs))
+        # A bar's close price is not knowable until the bar ends, so a
+        # decision taken from it belongs at the bar's close time, not its
+        # open. Stamping it at the open backdates every trade by one full
+        # interval and buckets the daily circuit breaker on the wrong day.
+        self._bar = interval_duration(config.data.candle_interval)
         # In-memory risk state: a backtest must not inherit or leave behind
         # a circuit-breaker halt.
         self._risk = RiskEngine(config, InMemoryRiskStateStore())
@@ -135,6 +141,14 @@ class BacktestRunner:
         )
         if not candles:
             return result
+
+        # Take the bar duration from the data, not from config. Config's
+        # interval tells the *fetcher* what to request; a caller replaying a
+        # 1h series under a 15m config would otherwise stamp decisions on
+        # boundaries no bar has, silently. The series is the authority on
+        # how long its own bars are.
+        if len(candles) >= 2:
+            self._bar = candles[1].timestamp - candles[0].timestamp
 
         equity = self._config.backtest.initial_capital_usd
         result.equity_curve.append(equity)
@@ -165,7 +179,9 @@ class BacktestRunner:
                     equity += closed.net_pnl_usd
                     # The breaker sees backtest time, not the wall clock, so
                     # daily limits follow the simulated calendar.
-                    self._risk.record_realized_pnl(closed.net_pnl_usd, candle.timestamp)
+                    self._risk.record_realized_pnl(
+                        closed.net_pnl_usd, self._decision_at(candle)
+                    )
                     position = None
                     entry_fees = Decimal(0)
 
@@ -199,7 +215,8 @@ class BacktestRunner:
             signal=signal, quote=quote, size_usd=size_usd, mode=Mode.BACKTEST
         )
 
-        decision = self._risk.approve(intent, candle.timestamp)
+        decision_at = self._decision_at(candle)
+        decision = self._risk.approve(intent, decision_at)
         if not decision.approved:
             result.entries_blocked_by_risk += 1
             for code, _ in decision.rejections:
@@ -210,7 +227,7 @@ class BacktestRunner:
         fill = self._fills.simulate(
             quote,
             size_usd,
-            at=candle.timestamp,
+            at=decision_at,
             creates_token_account=creates_account,
             sol_price_usd=self._sol_price_at(signal.token_mint, candle),
         )
@@ -219,46 +236,69 @@ class BacktestRunner:
             token_mint=signal.token_mint,
             entry_price=fill.price,
             size_usd=size_usd,
-            opened_at=candle.timestamp,
+            opened_at=decision_at,
         )
         return position, fill.fee_usd
 
     def _maybe_close(
         self, position: Position, entry_fees: Decimal, signal: Signal, candle: Candle
     ) -> ClosedTrade | None:
-        exit_price = self._exit_price(candle)
-        # Stops are evaluated on the adverse exit price, not the raw close:
-        # that is the price we would actually get out at.
-        evaluation = self._risk.evaluate_position(position, exit_price)
+        # Stops are checked against the bar's intrabar extremes, not just its
+        # close. A stop hit mid-bar that recovered by the close is a real
+        # loss the position would have taken; scoring only the close silently
+        # skips it and flatters the strategy. Triggering uses the raw high/low
+        # (did the market actually reach the level?) while the fill is marked
+        # at the level itself, adjusted adversely.
+        # The risk engine still makes the call; it is simply asked about the
+        # extremes the bar actually reached rather than only its close.
+        stop_hit = (
+            self._risk.evaluate_position(position, candle.low).action
+            is StopAction.STOP_LOSS
+        )
+        take_hit = (
+            self._risk.evaluate_position(position, candle.high).action
+            is StopAction.TAKE_PROFIT
+        )
 
-        if evaluation.action is StopAction.STOP_LOSS:
+        if stop_hit:
+            # Stop first when one bar spans both thresholds: OHLC cannot say
+            # which came first, so assume the adverse one.
             reason = "stop_loss"
-        elif evaluation.action is StopAction.TAKE_PROFIT:
+            raw_exit = stop_loss_price(position, self._config.risk)
+        elif take_hit:
             reason = "take_profit"
+            raw_exit = take_profit_price(position, self._config.risk)
         elif signal.type is SignalType.SELL:
             reason = signal.metadata.get("reason", "strategy_sell")
+            raw_exit = candle.close
         else:
             return None
+
+        exit_price = self._adverse(raw_exit)
 
         exit_fill = self._fills.simulate(
             self._synthetic_quote(
                 position.token_mint, candle, Side.SELL, position.size_usd
             ),
             position.size_usd,
-            at=candle.timestamp,
+            at=self._decision_at(candle),
             creates_token_account=False,
             sol_price_usd=self._sol_price_at(position.token_mint, candle),
         )
         return ClosedTrade(
             token_mint=position.token_mint,
             entry_at=position.opened_at,
-            exit_at=candle.timestamp,
+            exit_at=self._decision_at(candle),
             entry_price=position.entry_price,
             exit_price=exit_price,
             size_usd=position.size_usd,
             fees_usd=entry_fees + exit_fill.fee_usd,
             exit_reason=reason,
         )
+
+    def _decision_at(self, candle: Candle) -> datetime:
+        """When this bar's close became known — the real decision time."""
+        return candle.timestamp + self._bar
 
     def _sol_price_at(self, token_mint: str, candle: Candle) -> Decimal | None:
         return sol_price_from_close(token_mint, candle.close)
@@ -289,6 +329,11 @@ class BacktestRunner:
             source="backtest",
         )
 
-    def _exit_price(self, candle: Candle) -> Decimal:
+    def _adverse(self, price: Decimal) -> Decimal:
+        """A sell marked down by the total adverse move.
+
+        Applies to whatever level we actually exited at — a stop level, a
+        take-profit level, or the close — not only to the close.
+        """
         adverse = self._config.backtest.total_adverse_pct / HUNDRED
-        return candle.close * (Decimal(1) - adverse)
+        return price * (Decimal(1) - adverse)

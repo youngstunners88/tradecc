@@ -27,6 +27,7 @@ from core.performance import ClosedTrade
 from core.telemetry import log_and_track
 from core.types import Candle, Mode, Position, Quote, Side, SignalType, TradeIntent
 from execution.client import QuoteSource
+from core.candles import completed_candles
 from execution.costs import CostModel, sol_price_from_close
 from execution.fills import FillSimulator
 from execution.http import ProviderError
@@ -114,11 +115,19 @@ class PaperTrader:
             )
             return TickResult(moment, "provider_error", error=str(exc))
 
+        # The provider returns the current, still-forming bar alongside the
+        # finished ones. Its "close" is the live price and will change, so
+        # acting on it means deciding from a bar that has not happened yet —
+        # and it would make paper evidence come from a different process
+        # than the backtest that validated the strategy.
+        candles = completed_candles(candles, self._config.data.candle_interval, moment)
+
         if len(candles) < self._strategy.minimum_candles:
             return TickResult(
                 moment,
                 "insufficient_history",
-                detail=f"{len(candles)} candles, need {self._strategy.minimum_candles}",
+                detail=f"{len(candles)} completed candles, "
+                f"need {self._strategy.minimum_candles}",
             )
 
         signal = self._strategy.generate(state.token_mint, candles)

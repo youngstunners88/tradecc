@@ -121,7 +121,13 @@ def baseline_folds(
     Valid only because Phase A holds parameters fixed across folds; see
     the module docstring.
     """
-    entry_index = {c.timestamp: i for i, c in enumerate(candles)}
+    # Trades are stamped at the bar's CLOSE, so index by close time to map a
+    # trade back to the bar that produced it. Indexing by open time would
+    # attribute every trade to the following bar and smear fold boundaries.
+    bar = candles[1].timestamp - candles[0].timestamp if len(candles) >= 2 else None
+    entry_index = {
+        (c.timestamp + bar if bar else c.timestamp): i for i, c in enumerate(candles)
+    }
     bounds = fold_bounds(len(candles), folds)
     buckets: list[list[ClosedTrade]] = [[] for _ in bounds]
     for trade in result.trades:
@@ -261,7 +267,11 @@ def _score_window(config, candles, params, token, lo, hi) -> FoldResult:
     """Run the chosen config over candles[:hi], keep trades entered in [lo,hi)."""
     strategy = MomentumStrategy(MomentumParams(**params))
     result = BacktestRunner(config, strategy).run(token, candles[:hi])
-    entry_index = {c.timestamp: i for i, c in enumerate(candles)}
+    # Index by bar close, matching how trades are stamped — see baseline_folds.
+    bar = candles[1].timestamp - candles[0].timestamp if len(candles) >= 2 else None
+    entry_index = {
+        (c.timestamp + bar if bar else c.timestamp): i for i, c in enumerate(candles)
+    }
     kept = [
         t for t in result.trades
         if (i := entry_index.get(t.entry_at)) is not None and lo <= i < hi

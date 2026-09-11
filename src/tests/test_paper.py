@@ -31,9 +31,17 @@ START = datetime(2026, 9, 1, tzinfo=timezone.utc)
 
 
 def candles(prices) -> list[Candle]:
+    """A series whose final bar *closes* exactly at START.
+
+    Paper mode discards bars that have not finished by `now`, so a series
+    laid out forward from START would be entirely in progress at
+    `now=START` and correctly ignored. Ending the series at START is what
+    a real poll returns: history behind you, nothing from the future.
+    """
+    last = len(prices)
     return [
         Candle(
-            timestamp=START + timedelta(minutes=15 * i),
+            timestamp=START - timedelta(minutes=15 * (last - i)),
             open=Decimal(str(p)),
             high=Decimal(str(p)),
             low=Decimal(str(p)),
@@ -373,3 +381,55 @@ def test_quote_source_used_by_paper_cannot_send():
 
     assert surface == {"get_quote", "get_quote_detailed"}
     assert isinstance(MockQuoteSource(), QuoteSource)
+
+
+def test_an_in_progress_bar_is_ignored(config, strategy):
+    """The still-forming bar must not influence the decision.
+
+    Its "close" is just the live price and will keep changing, so acting
+    on it means deciding from a bar that has not happened yet — and it
+    would make paper evidence come from a different process than the
+    backtest that validated the strategy.
+    """
+    settled = candles(BUY_SERIES)
+    # A bar opening exactly at START has not closed by START.
+    forming = settled + [
+        Candle(
+            timestamp=START,
+            open=Decimal("999"),
+            high=Decimal("999"),
+            low=Decimal("999"),
+            close=Decimal("999"),
+            volume=Decimal("1000"),
+        )
+    ]
+
+    without, store_a = trader(config, strategy, settled)
+    with_forming, store_b = trader(config, strategy, forming)
+
+    clean = without.tick(fresh_state(store_a), now=START)
+    noisy = with_forming.tick(fresh_state(store_b), now=START)
+
+    assert noisy.action == clean.action
+    assert noisy.signal == clean.signal
+
+
+def test_only_in_progress_bars_means_insufficient_history(config, strategy):
+    """No completed bars is no basis for a decision, not a fallback."""
+    forming = [
+        Candle(
+            timestamp=START + timedelta(minutes=15 * i),
+            open=Decimal("100"),
+            high=Decimal("100"),
+            low=Decimal("100"),
+            close=Decimal("100"),
+            volume=Decimal("1000"),
+        )
+        for i in range(10)
+    ]
+
+    paper, store = trader(config, strategy, forming)
+    result = paper.tick(fresh_state(store), now=START)
+
+    assert result.action == "insufficient_history"
+    assert result.trade is None

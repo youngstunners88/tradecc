@@ -129,7 +129,13 @@ def test_entry_fills_are_worse_than_the_close(config, strategy):
     result = runner(config, strategy).run(TOKEN, candles(TRENDING))
     trade = result.trades[0]
 
-    entry_candle = next(c for c in candles(TRENDING) if c.timestamp == trade.entry_at)
+    # Trades are stamped at the bar's close time, so the bar that produced
+    # the entry is the one closing at `entry_at`.
+    entry_candle = next(
+        c
+        for c in candles(TRENDING)
+        if c.timestamp + timedelta(minutes=15) == trade.entry_at
+    )
     assert trade.entry_price > entry_candle.close
 
 
@@ -137,7 +143,13 @@ def test_exit_fills_are_worse_than_the_close(config, strategy):
     result = runner(config, strategy).run(TOKEN, candles(TRENDING))
     trade = result.trades[0]
 
-    exit_candle = next(c for c in candles(TRENDING) if c.timestamp == trade.exit_at)
+    # Same close-time semantics as the entry: match the bar that *ends* at
+    # `exit_at`, not the one that opens on it.
+    exit_candle = next(
+        c
+        for c in candles(TRENDING)
+        if c.timestamp + timedelta(minutes=15) == trade.exit_at
+    )
     assert trade.exit_price < exit_candle.close
 
 
@@ -232,7 +244,9 @@ def test_no_look_ahead_a_prefix_run_matches_the_truncated_full_run(config, strat
     on_full = runner(config, strategy).run(TOKEN, full)
 
     # Every trade that closed within the prefix window must be identical.
-    closed_in_window = [t for t in on_full.trades if t.exit_at <= prefix[-1].timestamp]
+    # The window ends when its last bar closes, not when that bar opens.
+    prefix_ends = prefix[-1].timestamp + timedelta(minutes=15)
+    closed_in_window = [t for t in on_full.trades if t.exit_at <= prefix_ends]
     assert on_prefix.trades == closed_in_window
 
 
@@ -289,3 +303,66 @@ def test_expectancy_is_zero_with_no_trades():
 
     assert result.expectancy_usd == Decimal(0)
     assert result.win_rate_pct == Decimal(0)
+
+
+def wicked(bars, minutes: int = 15) -> list[Candle]:
+    """Candles carrying a real intrabar range: (close, low) per bar."""
+    return [
+        Candle(
+            timestamp=START + timedelta(minutes=minutes * i),
+            open=Decimal(str(close)),
+            high=Decimal(str(close)),
+            low=Decimal(str(low)),
+            close=Decimal(str(close)),
+            volume=Decimal("1000"),
+        )
+        for i, (close, low) in enumerate(bars)
+    ]
+
+
+def test_a_stop_hit_intrabar_fires_even_when_the_close_recovers(config, strategy):
+    """The bug: scoring only the close skips stops the position really took.
+
+    The final bar closes down ~1% (no stop on close) but its low dips 12%
+    below the entry, well past the 5% stop. That stop was hit in real life,
+    so it must fire here.
+    """
+    flat = [(p, p) for p in [100, 98, 96, 94, 92, 90, 88, 86, 88, 92, 96]]
+    series = wicked(flat + [(95, 85)])
+
+    result = runner(config, strategy).run(TOKEN, series)
+
+    assert result.trades, "expected the series to open a position"
+    stopped = [t for t in result.trades if t.exit_reason == "stop_loss"]
+    assert stopped, "intrabar stop was missed — close-only evaluation regressed"
+    # Exit is marked at the stop level (adversely), not at the bar's close.
+    assert stopped[-1].exit_price < Decimal("95")
+
+
+def test_close_only_dip_does_not_invent_a_stop(config, strategy):
+    """The mirror case: no wick, no stop. Guards against over-triggering."""
+    flat = [(p, p) for p in [100, 98, 96, 94, 92, 90, 88, 86, 88, 92, 96, 95]]
+
+    result = runner(config, strategy).run(TOKEN, wicked(flat))
+
+    assert not [t for t in result.trades if t.exit_reason == "stop_loss"]
+
+
+def test_trades_are_stamped_at_the_bar_close_not_the_bar_open(config, strategy):
+    """A bar's close is unknowable until the bar ends.
+
+    Stamping a decision at the bar's open backdates every trade by one
+    full interval and buckets the daily circuit breaker on the wrong day.
+    """
+    series = candles(TRENDING)
+    close_times = {c.timestamp + timedelta(minutes=15) for c in series}
+    open_times = {c.timestamp for c in series}
+
+    result = runner(config, strategy).run(TOKEN, series)
+
+    assert result.trades
+    for trade in result.trades:
+        assert trade.entry_at in close_times
+        assert trade.exit_at in close_times
+        # The first bar's open is the one time that is not also a close.
+        assert trade.entry_at != min(open_times)
