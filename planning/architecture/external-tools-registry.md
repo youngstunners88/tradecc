@@ -51,7 +51,6 @@ reasoning) · PARKED (not relevant now, no verdict needed)
 
 | Tool | Link | What's being evaluated |
 |---|---|---|
-| SocratiCode | github.com/giancarloerra/SocratiCode | Local codebase semantic-search MCP for token/call efficiency. Read the actual source, confirm it stays fully local (no cloud embeddings), check AGPL-3.0 terms, verify the efficiency claims against our own usage before adopting |
 | cryptoskill registry | github.com/jiayaoqijia/cryptoskill | 977-skill community registry (includes Helius/Jupiter/DEXScreener skills). If ever needed, pull and read **individual named skills**, never bulk-install |
 | immunity-agent (concept only) | github.com/PrismorSec/immunity-agent | Secret-cloaking concept is stronger than our current hook. **Do not use its "fetch a remote URL and follow its instructions" bootstrap under any circumstances** — that's a live prompt-injection vector regardless of vendor intent. If pursued, evaluate the actual source code directly and pin a specific commit |
 
@@ -75,6 +74,7 @@ reasoning) · PARKED (not relevant now, no verdict needed)
 
 | Tool | Link | Why parked |
 |---|---|---|
+| SocratiCode | github.com/giancarloerra/SocratiCode | **Evaluated 2026-09-11 at v1.13.3, source read directly — sound tool, wrong scale.** Local-by-default confirmed (`EMBEDDING_PROVIDER \|\| "ollama"`; cloud needs both an explicit provider *and* a key, no telemetry). AGPL-3.0 genuine and no blocker for unmodified local use. Not adopted because the efficiency headroom is small: our whole repo is ~127k tokens (`src/*.py` ~74k, mean file ~1,090), and navigation already resolves in 1–3 grep/read calls — against a cost of Qdrant + Ollama containers and a ~270 MB model per session. Revisit if the repo passes ~500k tokens/thousands of files, or a large external corpus is vendored in. See `planning/architecture/socraticode-evaluation.md` |
 | VinvAI | github.com/VinvAI/VinvAI | General Python testing/observability tool, unrelated to trading |
 | pbakaus/impeccable, VoltAgent/awesome-design-md | github.com/pbakaus/impeccable | Frontend design skills — TradeCC is CLI-only, no UI in scope |
 | V0DEV, Netlify | — | Dashboard/hosting tools; no UI greenlit yet |
