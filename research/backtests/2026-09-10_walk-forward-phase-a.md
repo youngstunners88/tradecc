@@ -116,3 +116,34 @@ last, protocol-bound check on whether *any* fixed parameter set survives
 out-of-time — with the expectation, given three converging negatives,
 that it will not. Either is the user's call. Continuing to tune without a
 fixed protocol is the one option the evidence rules out.
+
+---
+
+## Addendum — 2026-09-11: re-measured against the fixed harness
+
+The point-in-time audit of 2026-09-11 fixed three defects in the
+backtest/paper path (commit `bd1f7fc`): decisions were stamped at the
+bar's open while using its close, stops were evaluated on the close only
+with `high`/`low` never read, and paper mode acted on the still-forming
+bar. See
+`research/backtests/2026-09-11_momentum_lookahead-audit-and-buy-hold-baseline.md`.
+
+Phase A was re-measured at default parameters against the fixed harness.
+**The figures above are left as originally published**; this addendum
+records what changed.
+
+| Interval | Published above | Re-measured | Change |
+|---|---|---|---|
+| 1h | +0.5815 | **+0.5815** | none — bit-identical, all three folds |
+| 4h | −0.4264 | **−0.5494** | −0.1230 (one intrabar stop) |
+| 15m | −1.7785 | **−1.7785** | none — bit-identical, all three folds |
+
+Only 4h moved, and only because one trade hit its stop intrabar and
+recovered by the close — a loss the old close-only evaluation skipped.
+Its per-fold detail becomes fold 0 −1.3817, fold 1 +0.7102, fold 2
++0.1221 (unchanged).
+
+**No verdict changes.** All three intervals still fail the locked
+replication rule, for the same reasons: 1h on concentration, 4h on a
+negative pool, 15m on every condition. The one measurable change runs
+against the strategy, not for it.

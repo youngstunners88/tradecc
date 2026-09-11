@@ -108,3 +108,45 @@ respectable outcome rather than a reason to search harder. Genuinely new
 directions (a different signal source such as the v0.2 copy-trading work,
 or a different market regime filter) are decisions for the user under a
 fresh decision record — not a continuation of this search.
+
+---
+
+## Addendum — 2026-09-11: re-measured against the fixed harness
+
+The point-in-time audit of 2026-09-11 fixed three defects in the
+backtest/paper path (commit `bd1f7fc`) — decisions stamped at the bar's
+open while using its close, stops evaluated on the close only with
+`high`/`low` never read, and paper mode acting on the still-forming bar.
+See
+`research/backtests/2026-09-11_momentum_lookahead-audit-and-buy-hold-baseline.md`.
+
+Phase B was re-run in full against the fixed harness. **The figures above
+are left as originally published**; this addendum records what changed.
+
+| Interval | Pooled, published | Pooled, re-run | Trades | Verdict |
+|---|---|---|---|---|
+| 1h | +1.3145 | **+1.2929** | 10 (unchanged) | still NO |
+| 4h | +0.7885 | **+1.1498** | 7 (unchanged) | still NO |
+| 15m | −0.6383 | **−0.6383** | 10 (unchanged) | still NO |
+
+Per-fold, only two numbers moved: 1h fold 1 (+0.8061 → +0.7845) and 4h
+fold 1 (−0.3620 → **−0.0007**). 15m is bit-identical throughout.
+
+**A second-order effect worth recording.** On 4h fold 1 the *selected
+configuration itself changed*, from `f12/s34/r21/ob80` to
+`f12/s34/r7/ob80`. The intrabar-stop fix altered results on the training
+slice, which changed which configuration won the search. The fix
+propagates through parameter selection, not only through P&L — which is
+why this was re-run rather than assumed.
+
+Note the direction differs from Phase A: 4h improves here (+0.79 →
++1.15) while Phase A's 4h worsens (−0.43 → −0.55). Not a contradiction —
+Phase A trades fixed defaults, Phase B trades searched parameters, and
+the fix changed which parameters fold 1 selected.
+
+**No verdict changes.** All three intervals still fail the locked
+replication rule, and they fail on the structural conditions the extra
+P&L cannot touch: pooled trade counts remain 10, 7 and 10 against a
+floor of 12, and every interval still fails concentration. A larger
+pooled number on seven out-of-sample trades is not evidence of an edge —
+it is the same too-small sample, slightly rearranged.
