@@ -10,30 +10,63 @@ should not take** and to size the rest against measured, not assumed,
 conditions. Almost all of the value in this layer comes from the first
 half of that sentence.
 
-## Start here: the assumption that is costing the most
+## Start here: what measurement did to this layer's own assumptions
 
-The parameter sweep
-(`research/backtests/2026-09-09_momentum_parameter-sweep-holdout.md`)
-established that **slippage at ~0.6% per round trip is the dominant
-recurring cost, roughly 30× the recurring fees.** It also established
-that this number is *assumed*, not measured —
-`BacktestConfig.assumed_slippage_pct` is a config constant.
+This section used to open by asserting that **slippage runs ~0.6% per
+round trip, roughly 30× the recurring fees**, citing the 2026-09-09
+sweep. That claim was wrong by about two orders of magnitude, and the
+thing that proved it wrong was this layer doing its job.
 
-Jupiter's quote response carries `priceImpactPct` for **the actual size,
-on the actual route, right now.** So the highest-value thing this layer
-does is replace a global assumption with a per-trade measurement, and
-then **refuse trades whose measured impact exceeds their expected edge.**
+Measured against Jupiter on SOL/USDC:
 
-That is a mechanical improvement, not a search for new alpha: it removes
-known-negative-expectancy trades from the population. It is the one
-change in this skill that improves net P&L without needing to find an
-edge first.
+| Size | Measured `priceImpactPct` |
+|---|---|
+| $5 | 0.0000% |
+| $10 | 0.0044% |
+| $50 | 0.0012% |
+| $200 | 0.0000% |
 
-The same lesson generalises. `CostsConfig.sol_price_usd` defaults to
-`Decimal("200")`; SOL traded at **~$102 on 2026-09-10**, so every
-SOL-denominated cost is currently overstated by nearly 2×. A hardcoded
-market constant is wrong the day after you write it. Constants that
-describe the market belong in the data layer, not in config defaults.
+The pool holds ~$834M. A $10 trade does not move it. The 0.5% figure the
+old number was read from is the slippage **tolerance requested** — the
+worst case the route protects against — not a cost incurred. Conflating
+a tolerance with a cost is the specific error this layer exists to
+prevent.
+
+Three sibling constants were wrong the same way and are now fixed: SOL
+price was hardcoded at `200` while trading near `$102` (now taken
+per-bar from the data), priority fees were modelled as a flat total
+rather than **per compute unit** (understating them ~200,000×), and Jito
+tips were counted as zero. `BacktestConfig.assumed_slippage_pct` no
+longer exists; it is split into `price_impact_pct` (calibrated from
+measurement) and `execution_slippage_pct` (still assumed), so "how much
+of this is measured?" has an answer at a glance. Refresh the measured
+half with `research/calibrate_costs.py`.
+
+**The thesis survived; only its numbers died.** "Replace a global
+assumption with a per-trade measurement, then refuse trades whose
+measured cost exceeds their expected edge" was the right instruction —
+following it is what exposed four bad inputs at once. A hardcoded market
+constant is wrong the day after you write it. Constants that describe
+the market belong in the data layer, not in config defaults.
+
+### The strongest argument for declining trades
+
+This layer's first claim is that most of its value is in *not trading*.
+The buy-and-hold baseline — required by `backtest.md` from the start,
+never actually computed until 2026-09-11 — is the evidence:
+
+| Window | Strategy net | **Buy-and-hold net** |
+|---|---|---|
+| 1h · Jul 29 → Sep 9 | +$0.58 | **+$3.93** |
+| 4h · Mar 27 → Sep 9 | −$0.55 | **+$1.70** |
+| 15m · Aug 30 → Sep 9 | −$1.78 | **−$0.28** |
+
+Same costs, same $10 size. **Holding beat trading on every interval**,
+and on 15m the strategy lost 6× more than doing nothing. The best
+available decision on this data was to decline every trade — which is
+precisely the action this layer is built to take. Measure first, and the
+refusal often *is* the alpha. See
+`research/backtests/2026-09-11_momentum_lookahead-audit-and-buy-hold-baseline.md`.
 
 ## Verified sources
 
