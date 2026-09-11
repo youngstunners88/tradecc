@@ -5,10 +5,23 @@ description: v0.2 wallet-following — discovering candidate wallets, vetting th
 
 # Copy-trading (v0.2)
 
-Copy-trading is worth building because it is a **genuinely different
+Copy-trading is worth investigating because it is a **genuinely different
 alpha source**, not a variant of the momentum strategy that already
 failed held-out validation. Its edge, if it exists, comes from someone
 else's information rather than from a pattern in the price series.
+
+**Start from the base rate, which is poor.** A 90-day, multi-exchange
+study of over 100,000 outcomes found only **~48% of copiers were
+profitable**, and — the number that matters most here — while **97% of
+leaders were personally profitable, only ~44% produced positive follower
+P&L**. Leader profitability is therefore close to uninformative about
+follower profitability. That gap is not mysterious: it is the copy lag
+and adverse selection described below, measured at scale.
+
+Read that as the null hypothesis this skill has to beat, not as a reason
+to skip the work. It means the burden is on a candidate wallet to show
+it clears the follower bar, and that "this wallet is up a lot" is the
+beginning of the analysis rather than the end of it.
 
 It also carries failure modes momentum does not have, and most of them
 are adversarial rather than statistical.
@@ -50,13 +63,24 @@ Add:
 - **Selection-pool size.** "Best of 10,000" and "best of 12" are
   completely different claims about the same win rate. Record how many
   wallets were scanned to surface this one.
-- **P&L concentration.** If one trade produced most of the profit, this
-  is a lottery ticket, not a process. The sweep's "+$0.47 on 3 trades at
-  a 33% win rate" is the cautionary example — one trade carried it.
+- **P&L concentration.** If one trade or one stretch produced most of the
+  profit, this is a lottery ticket, not a process. The standing example is
+  momentum on 1h: **+$0.58 overall, but the first third of the window
+  *lost* money and either remaining third alone exceeded the entire
+  pooled result.** (An earlier version cited "+$0.47 on 3 trades" from
+  the 2026-09-09 sweep; that figure predates the cost-model correction
+  and is superseded.)
 - **Consistency across time.** Profitable in most months beats one
   enormous month. A single regime can flatter a wallet exactly as it
   flatters a strategy.
-- **Post-cutoff performance.** The only number that is actually evidence.
+- **Post-cutoff performance, measured against buy-and-hold.** The only
+  number that is actually evidence — and "positive" is the wrong bar.
+  Momentum cleared positive on 1h (+$0.58) and still lost to simply
+  holding SOL over the same window (+$3.93). A wallet that makes money
+  more slowly than holding is a worse version of doing nothing. Report
+  buy-and-hold over the wallet's own post-T window beside its net, every
+  time. See
+  `research/backtests/2026-09-11_momentum_lookahead-audit-and-buy-hold-baseline.md`.
 
 ### Survivorship bias in the discovery step
 
@@ -65,6 +89,30 @@ winning*. Wallets that blew up have left the list. Any population sourced
 this way is pre-filtered for luck, which inflates every statistic
 computed from it. Note the sourcing method in the write-up, because it
 determines how much the numbers can be trusted.
+
+### Point-in-time discipline when replaying a wallet
+
+Cutoff T governs *selection*. It does not, on its own, make the replay
+honest. Scoring a wallet's past trades means reconstructing what was
+knowable **at each trade's timestamp**, not what is knowable now:
+
+- **Liquidity, holder count and token age must be as-of the trade**, not
+  as-of today. A token that is deep and established now may have been a
+  thin new pool when the wallet bought it — judging that entry against
+  today's depth credits the wallet with a safety it never had.
+- **Token survival is knowledge from the future.** Which of its tokens
+  later went to zero is precisely what the wallet did not know. Use it to
+  compute the rug ratio (a property of the wallet's *record*), never to
+  excuse or re-weight an individual entry.
+- **Our own copy decision must be reconstructable from data available at
+  that timestamp.** If the liquidity gate would have refused the trade
+  then, it does not count toward the wallet's copyable record, however it
+  turned out.
+
+This is the bug class the 2026-09-11 audit checked the backtest harness
+for, and the TradingAgents notes flag it explicitly for wallet history.
+The audit found the harness clean; this section exists so copy-trading
+does not reintroduce it through a different door.
 
 ## Red flags that disqualify outright
 
@@ -93,9 +141,25 @@ available N seconds later, where N is your realistic detection-to-fill
 latency. Subtract the result from the wallet's reported returns before
 scoring it.
 
-A wallet whose edge does not survive its own copy lag is not a candidate,
-however good its record looks. This check is cheap and it eliminates most
-candidates.
+**Open dependency — this check is not currently feasible as specified.**
+It needs prices at realistic detection-to-fill latency, which is
+*seconds*. The finest interval the data layer exposes is **1m**
+(GeckoTerminal), so sub-minute lag cannot be measured from the sources
+this project has. Two ways forward, and the choice is a real decision,
+not an implementation detail:
+
+- **Raise the latency assumption to ≥1m** and measure at 1m granularity.
+  Honest and available today, but it models a slower follower than we
+  would actually be, so it overstates the cost and will reject some
+  viable wallets.
+- **Evaluate a finer-grained source** — trade-level data via Helius
+  parsed transactions, or Birdeye. Measures the real thing, but adds a
+  keyed dependency and its own vetting.
+
+Until that is decided, a copy-lag figure quoted at sub-minute latency is
+an estimate wearing a measurement's clothes. A wallet whose edge does not
+survive its own copy lag is not a candidate, however good its record
+looks — but always say which granularity the figure came from.
 
 ### 2. Being copied is exploitable
 
@@ -164,7 +228,9 @@ must carry, at minimum:
 - Address, and **how it was discovered** (including pool size scanned).
 - **Cutoff date T**, fixed before evaluation.
 - Pre-T stats and post-T stats, reported separately.
-- Trade count, P&L concentration, and measured copy-lag cost.
+- Trade count, P&L concentration, and measured copy-lag cost (stating
+  the granularity it was measured at).
+- **Buy-and-hold over the same post-T window**, beside the wallet's net.
 - Red-flag checks, each explicitly checked rather than assumed.
 - A verdict, including the case against.
 
