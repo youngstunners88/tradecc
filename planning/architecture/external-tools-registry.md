@@ -36,11 +36,17 @@ reasoning) · PARKED (not relevant now, no verdict needed)
 
 ## GATED — v0.2, needs explicit greenlight per component (not a blanket unlock)
 
+The four in-house v0.2 skills live on the parked branch
+`claude/v02-intelligence-architecture`, which stays unmerged and
+unopened. Their status changes are recorded here on the working branch
+rather than literally in the same commit, since the two live on
+different branches.
+
 | Tool | Link | Gate condition |
 |---|---|---|
-| `market-intelligence` skill | (built in-house) | Reviewed, corrected, merged |
-| `copy-trading` skill | (built in-house) | Corrected (5 changes), pending final commit |
-| `regime-detection` skill | (built in-house) | Next in review sequence |
+| `market-intelligence` skill | (built in-house) | Reviewed, corrected, committed (`cc64c92`) |
+| `copy-trading` skill | (built in-house) | Reviewed, corrected, committed (`37e6fc2`) — 5 changes: buy-and-hold baseline bar, point-in-time replay discipline, copy-lag flagged as an open dependency, follower base rate in the opening, stale concentration figure replaced. **Open decision inside it:** copy-lag needs sub-minute prices but the data layer's finest interval is 1m — either raise the latency assumption to ≥1m or evaluate a finer-grained source (Helius parsed transactions / Birdeye) |
+| `regime-detection` skill | (built in-house) | **Next in review sequence — active** |
 | `astra-analyst` skill | (built in-house) | Last in review sequence — extra scrutiny on prompt-injection surface before any commit |
 | dexscreener-cli-mcp-tool | github.com/vibeforge1111/dexscreener-cli-mcp-tool | Skill proposed (`dexscreener-scan`), not built — held with rest of v0.2 |
 | teamlore | npmjs.com/package/teamlore | Confirmed to be the legitimate small `.lore/` tool (zero deps, `teamlore@0.3.0`). Still not run — needs explicit go, and `DO_NOT_TRACK=1` must be set when it is |
