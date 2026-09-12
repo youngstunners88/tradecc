@@ -105,3 +105,56 @@ def test_corrupt_state_file_does_not_unlock_trading(store, now):
     # Corrupt state yields a clean day rather than a crash or a phantom halt.
     assert breaker.check(now).approved
     assert breaker.state(now).realized_pnl_usd == Decimal("0")
+
+
+def test_non_finite_persisted_pnl_cannot_disable_the_breaker(tmp_path):
+    """A persisted `Infinity` absorbed every loss, so the breaker never
+    tripped: a $1000 loss against a $5 limit did not halt trading. Corrupt
+    state must start the day clean instead."""
+    import json as _json
+    from datetime import datetime, timezone
+
+    from risk.circuit_breaker import DailyCircuitBreaker
+    from risk.state import RiskStateStore
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    (tmp_path / "daily-risk-state.json").write_text(
+        _json.dumps(
+            {
+                "trading_day": today,
+                "realized_pnl_usd": "Infinity",
+                "trade_count": 0,
+                "halted": False,
+                "halt_reason": None,
+            }
+        )
+    )
+    breaker = DailyCircuitBreaker(Decimal("5"), RiskStateStore(tmp_path))
+    state = breaker.record_realized_pnl(Decimal("-1000"))
+    assert state.realized_pnl_usd == Decimal("-1000")
+    assert state.halted
+
+
+def test_nan_persisted_pnl_does_not_crash_the_breach_check(tmp_path):
+    """Decimal('NaN') raised InvalidOperation out of `_breached`."""
+    import json as _json
+    from datetime import datetime, timezone
+
+    from risk.circuit_breaker import DailyCircuitBreaker
+    from risk.state import RiskStateStore
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    (tmp_path / "daily-risk-state.json").write_text(
+        _json.dumps(
+            {
+                "trading_day": today,
+                "realized_pnl_usd": "NaN",
+                "trade_count": 0,
+                "halted": False,
+                "halt_reason": None,
+            }
+        )
+    )
+    breaker = DailyCircuitBreaker(Decimal("5"), RiskStateStore(tmp_path))
+    assert breaker.check().approved
+    assert breaker.state().realized_pnl_usd == Decimal("0")

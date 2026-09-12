@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
+
+from core.types import finite_decimal
 
 MINIMUM_PAPER_TRADING_DAYS = 30
 
@@ -119,18 +121,28 @@ def _check_human_approval(raw: dict[str, Any]) -> list[str]:
 
 
 def _parse_datetime(value: Any) -> datetime | None:
+    """ISO-8601 to an aware UTC datetime, or None.
+
+    Timestamps are normalised to UTC because the checks below compare them to
+    each other. A file mixing an aware `paper_started_at` with a naive
+    `paper_ended_at` used to raise `TypeError` straight out of this module —
+    an uncaught crash where the contract promises "locked". A naive timestamp
+    is read as UTC, which is the convention `risk.state` already uses for
+    trading days.
+    """
     if not isinstance(value, str):
         return None
     try:
-        return datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _parse_decimal(value: Any) -> Decimal | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
-        return None
-    try:
-        return Decimal(str(value))
-    except InvalidOperation:
-        return None
+    """Finite decimals only. `NaN` would raise out of a comparison below and
+    `Infinity` would silently satisfy the drawdown check at any observed
+    drawdown — both defeat the fail-closed property this module promises."""
+    return finite_decimal(value)

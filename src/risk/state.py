@@ -19,6 +19,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Protocol
 
+from core.types import finite_decimal
+
 
 def current_trading_day(now: datetime | None = None) -> date:
     """Trading days run on UTC boundaries."""
@@ -63,11 +65,24 @@ class DailyRiskState:
     def from_dict(raw: dict[str, object]) -> DailyRiskState:
         return DailyRiskState(
             trading_day=date.fromisoformat(str(raw["trading_day"])),
-            realized_pnl_usd=Decimal(str(raw.get("realized_pnl_usd", "0"))),
+            # Finite only. A hand-edited or mis-serialised "Infinity" here
+            # absorbs every subsequent loss, so the breaker never trips; "NaN"
+            # raises out of the breach comparison. Either silently disables the
+            # control this module exists to make durable.
+            realized_pnl_usd=_finite_or_raise(raw.get("realized_pnl_usd", "0")),
             trade_count=int(raw.get("trade_count", 0) or 0),
             halted=bool(raw.get("halted", False)),
             halt_reason=raw.get("halt_reason") or None,  # type: ignore[arg-type]
         )
+
+
+def _finite_or_raise(value: object) -> Decimal:
+    """Reject non-finite P&L. Raises so `RiskStateStore.load` treats the file
+    as corrupt and starts the day clean rather than trusting the value."""
+    parsed = finite_decimal(value)
+    if parsed is None:
+        raise ValueError(f"realized_pnl_usd is not a finite decimal: {value!r}")
+    return parsed
 
 
 class RiskStateStorage(Protocol):

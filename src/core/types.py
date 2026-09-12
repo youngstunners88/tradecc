@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 
 
@@ -180,3 +180,29 @@ class RiskDecision:
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def finite_decimal(value: object) -> Decimal | None:
+    """Parse a money-ish value to a **finite** Decimal, or None.
+
+    `Decimal(str(x))` happily accepts `NaN` and `Infinity`, and both arrive
+    through ordinary paths: `json.loads` parses the bare literals `NaN`,
+    `Infinity` and `-Infinity` by default, and any float that overflows
+    stringifies to `inf`. Neither value is a quantity of money, and both break
+    the comparisons that safety controls are built from:
+
+    - `Decimal("NaN") >= limit` raises `InvalidOperation`, turning a risk check
+      into an uncaught crash.
+    - `Decimal("Infinity")` absorbs every loss, so a circuit breaker comparing
+      against it can never trip — a $1000 loss against a $5 limit does not halt.
+
+    Booleans are rejected too: `True` is an `int` in Python, and a JSON `true`
+    silently becoming `Decimal(1)` is never what the caller meant.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal)):
+        return None
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    return parsed if parsed.is_finite() else None

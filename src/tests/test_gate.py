@@ -137,3 +137,71 @@ def test_all_failures_are_reported_together(tmp_path):
 
     assert not result.unlocked
     assert len(result.failures) >= 3
+
+
+# --- Non-finite numbers and mixed-awareness timestamps.
+#
+# All four inputs below used to defeat the fail-closed contract: two by
+# raising an uncaught exception out of the module, two by quietly unlocking.
+# json.loads parses the bare literals NaN/Infinity by default, so none of
+# these requires a hand-crafted parser to produce.
+
+
+def test_infinite_drawdown_threshold_does_not_unlock(tmp_path):
+    """Infinity as a threshold satisfied `observed > threshold` at any
+    observed drawdown — a 99% drawdown passed a gate that claimed to cap it."""
+    path = tmp_path / "gate.json"
+    path.write_text(
+        json.dumps({**VALID_GATE, "observed_max_drawdown_pct": 99}).replace(
+            '"max_drawdown_threshold_pct": 15', '"max_drawdown_threshold_pct": Infinity'
+        )
+    )
+    result = evaluate_live_gate(path)
+    assert not result.unlocked
+    assert any("max_drawdown_threshold_pct" in f for f in result.failures)
+
+
+def test_nan_expectancy_is_locked_not_a_crash(tmp_path):
+    """Decimal('NaN') raises InvalidOperation from `expectancy <= 0`."""
+    path = tmp_path / "gate.json"
+    path.write_text(json.dumps(VALID_GATE).replace('"net_expectancy_usd": 1.25',
+                                                   '"net_expectancy_usd": NaN'))
+    result = evaluate_live_gate(path)
+    assert not result.unlocked
+    assert any("net_expectancy_usd" in f for f in result.failures)
+
+
+def test_infinite_expectancy_does_not_unlock(tmp_path):
+    path = tmp_path / "gate.json"
+    path.write_text(json.dumps(VALID_GATE).replace('"net_expectancy_usd": 1.25',
+                                                   '"net_expectancy_usd": Infinity'))
+    assert not evaluate_live_gate(path).unlocked
+
+
+def test_mixed_naive_and_aware_timestamps_do_not_crash(tmp_path):
+    """A naive paper_ended_at against an aware paper_started_at raised
+    TypeError straight out of the module. Naive is now read as UTC."""
+    result = evaluate_live_gate(
+        write_gate(tmp_path / "gate.json", paper_ended_at="2026-02-15T00:00:00")
+    )
+    assert isinstance(result.unlocked, bool)
+    assert result.unlocked, result.failures
+
+
+def test_naive_timestamps_throughout_still_evaluate(tmp_path):
+    result = evaluate_live_gate(
+        write_gate(
+            tmp_path / "gate.json",
+            paper_started_at="2026-01-01T00:00:00",
+            paper_ended_at="2026-02-15T00:00:00",
+            threshold_set_at="2025-12-28T00:00:00",
+            approved_at="2026-02-16T09:00:00",
+        )
+    )
+    assert result.unlocked, result.failures
+
+
+def test_boolean_is_not_a_number(tmp_path):
+    """JSON `true` must not become Decimal(1) and satisfy a numeric check."""
+    result = evaluate_live_gate(write_gate(tmp_path / "gate.json", net_expectancy_usd=True))
+    assert not result.unlocked
