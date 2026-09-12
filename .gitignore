@@ -17,3 +17,4 @@ research/.candle-cache/
 
 # Sweep intermediates — regenerate with research/sweep.py, not source
 research/.sweep-winners.json
+research/.universe.json
