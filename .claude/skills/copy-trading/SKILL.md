@@ -141,25 +141,30 @@ available N seconds later, where N is your realistic detection-to-fill
 latency. Subtract the result from the wallet's reported returns before
 scoring it.
 
-**Open dependency — this check is not currently feasible as specified.**
-It needs prices at realistic detection-to-fill latency, which is
-*seconds*. The finest interval the data layer exposes is **1m**
-(GeckoTerminal), so sub-minute lag cannot be measured from the sources
-this project has. Two ways forward, and the choice is a real decision,
-not an implementation detail:
+**Decided (2026-09-12): measure copy lag at ≥1m granularity.** The check
+wants prices at realistic detection-to-fill latency, which is *seconds*,
+but the finest interval the data layer exposes is **1m**
+(GeckoTerminal). Rather than quote a sub-minute figure the data cannot
+support, the assumption is raised to match the data: **N = 1 minute**.
 
-- **Raise the latency assumption to ≥1m** and measure at 1m granularity.
-  Honest and available today, but it models a slower follower than we
-  would actually be, so it overstates the cost and will reject some
-  viable wallets.
-- **Evaluate a finer-grained source** — trade-level data via Helius
-  parsed transactions, or Birdeye. Measures the real thing, but adds a
-  keyed dependency and its own vetting.
+Be clear about what that costs. A 1m assumption models a **slower
+follower than we would actually be**, so it *overstates* copy lag and
+will reject some wallets that a faster follower could copy profitably.
+That bias is deliberate and it runs the safe way — this skill would
+rather discard a viable candidate than admit one whose edge is an
+artefact of an optimistic latency guess.
 
-Until that is decided, a copy-lag figure quoted at sub-minute latency is
-an estimate wearing a measurement's clothes. A wallet whose edge does not
-survive its own copy lag is not a candidate, however good its record
-looks — but always say which granularity the figure came from.
+Finer-grained sources exist (trade-level data via Helius parsed
+transactions, or Birdeye). **They are deliberately not being evaluated
+now.** That work is only worth doing if copy-trading otherwise clears
+review *and* the 1m assumption is specifically what blocks a candidate
+from passing — i.e. a wallet that fails only on copy lag and would pass
+at realistic latency. Anything short of that, and a keyed dependency
+buys precision nobody is waiting on.
+
+A wallet whose edge does not survive its own copy lag is not a
+candidate, however good its record looks. Always state the granularity
+the figure was measured at — which, until the above changes, is 1m.
 
 ### 2. Being copied is exploitable
 
@@ -228,8 +233,9 @@ must carry, at minimum:
 - Address, and **how it was discovered** (including pool size scanned).
 - **Cutoff date T**, fixed before evaluation.
 - Pre-T stats and post-T stats, reported separately.
-- Trade count, P&L concentration, and measured copy-lag cost (stating
-  the granularity it was measured at).
+- Trade count, P&L concentration, and measured copy-lag cost at **1m
+  granularity** (state it explicitly — the figure is conservative by
+  construction, see above).
 - **Buy-and-hold over the same post-T window**, beside the wallet's net.
 - Red-flag checks, each explicitly checked rather than assumed.
 - A verdict, including the case against.
