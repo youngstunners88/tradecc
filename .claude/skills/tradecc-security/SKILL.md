@@ -149,7 +149,7 @@ When performing a security review or bug-fix pass:
 
 Run from the tradecc repo root (or pass the path):
 
-- `scripts/audit-dependencies.sh` — checks for risky package names, preferred packages, and runs pip-audit/safety if available. Also does a light heuristic scan for hard-coded secrets.
+- `scripts/audit-dependencies.sh` — checks for risky package names, preferred packages, and runs pip-audit/safety if available. **Advisory only — it never exits non-zero.** Like the scan script it does not detect secrets by shape; that is `.claude/hooks/block-secrets.py`'s job.
 - `scripts/static-security-scan.sh` — lightweight static scan for structural
   violations of the non-negotiable rules (unsimulated sends, hard-coded live
   mode, typosquat imports, unvetted `Keypair` construction). It deliberately

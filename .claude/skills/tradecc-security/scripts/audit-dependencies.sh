@@ -37,8 +37,14 @@ echo "--- Preferred packages present? ---"
 for pkg in "${SAFE_SOLANA_PKGS[@]}"; do
   if [[ -f requirements.txt ]] && grep -qiE "^${pkg}([=<>]|$)" requirements.txt 2>/dev/null; then
     echo "OK: $pkg listed in requirements.txt"
-  elif [[ -f pyproject.toml ]] && grep -qi "$pkg" pyproject.toml 2>/dev/null; then
-    echo "OK: $pkg referenced in pyproject.toml"
+  elif [[ -f pyproject.toml ]] && \
+       grep -qiE "^[[:space:]]*[\"']${pkg}[\"'>=<~!]" pyproject.toml 2>/dev/null; then
+    # Must look like a declared dependency entry, not any mention of the word.
+    # A bare substring match reported "OK: solana referenced in pyproject.toml"
+    # off the project *description* line, which is false reassurance in a
+    # security script — it claims the official package is declared when it is
+    # not declared at all.
+    echo "OK: $pkg declared in pyproject.toml"
   else
     echo "NOTE: $pkg not obviously declared (may be transitive or not yet added)"
   fi
@@ -61,12 +67,21 @@ else
 fi
 
 echo
-echo "--- Quick source scan for hard-coded secrets (heuristic) ---"
-# Very basic patterns — not a full secret scanner
-grep -rniE "(private[_-]?key|seed[_-]?phrase|secret[_-]?key|api[_-]?key).*=.*['\"][a-zA-Z0-9+/]{20,}" \
-  --include="*.py" --include="*.env*" --include="*.yaml" --include="*.yml" \
-  --exclude-dir=.git --exclude-dir=.venv --exclude-dir=venv --exclude-dir=__pycache__ \
-  . 2>/dev/null | head -20 || echo "No obvious hard-coded long secrets found by heuristic."
+echo "--- Secret scanning ---"
+# Deliberately not done here. A heuristic shape regex lived at this spot and was
+# removed: the same pattern in static-security-scan.sh matched a loop variable
+# named `key` and block-secrets.py's own refusal messages, i.e. false positives
+# on a clean repo. Secret detection belongs to `.claude/hooks/block-secrets.py`,
+# which matches candidate word runs against the real BIP-39 wordlist and is
+# wired as a PreToolUse hook in `.claude/settings.json`. Do not reintroduce a
+# shape regex here.
+echo "Handled by .claude/hooks/block-secrets.py (BIP-39 wordlist, PreToolUse)."
+echo "This script does not duplicate it."
 
 echo
-echo "=== Audit complete. Review any CRITICAL findings before continuing. ==="
+echo "=== Audit complete. Advisory only — this script never fails a build. ==="
+echo "Review anything printed above before adding a dependency that touches"
+echo "wallets or the network."
+# Advisory by design: findings here are for a human to read, not a gate. The
+# gate is the test suite, the CI secret scan, and the validation gate itself.
+exit 0
