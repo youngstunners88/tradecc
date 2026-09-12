@@ -93,3 +93,23 @@ def test_trivially_short_values_are_not_registered(log_stream):
     get_logger("t").info("harmless abc text")
 
     assert "abc" in log_stream.getvalue()
+
+
+def test_secrets_are_registered_before_any_component_reads_the_environment(monkeypatch):
+    """Registration must precede configure_logging/configure_telemetry/
+    load_config. Those all read the environment, so registering after them
+    left a window whose safety depended on none of them ever logging."""
+    import cli
+
+    calls: list[str] = []
+    monkeypatch.setattr(cli, "register_secret", lambda v: calls.append("register"))
+    monkeypatch.setattr(cli, "configure_logging", lambda: calls.append("logging"))
+    monkeypatch.setattr(cli, "configure_telemetry", lambda: calls.append("telemetry"))
+    monkeypatch.setattr(cli, "load_config", lambda *a, **k: calls.append("config"))
+
+    cli._bootstrap("config.backtest.yaml", None)
+
+    assert calls, "bootstrap made no calls"
+    first_other = next(i for i, c in enumerate(calls) if c != "register")
+    assert all(c == "register" for c in calls[:first_other])
+    assert len(calls[:first_other]) == len(cli.SECRET_ENV_NAMES)

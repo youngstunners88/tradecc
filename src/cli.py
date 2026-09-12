@@ -36,14 +36,21 @@ EXIT_ERROR = 1
 EXIT_GATE_LOCKED = 2
 
 
+SECRET_ENV_NAMES = ("HELIUS_API_KEY", "POSTHOG_API_KEY", "OPENROUTER_API_KEY")
+
+
 def _bootstrap(config_path: str, mode: Mode | None) -> RunConfig:
+    # Registration comes first, before any component that reads the
+    # environment. It used to run last, after configure_telemetry() and
+    # load_config() had both already touched these variables — no leak today,
+    # because nothing in that window logs, but the safety of the ordering then
+    # depended on every future log line added to those paths. It no longer
+    # does.
+    for name in SECRET_ENV_NAMES:
+        register_secret(os.environ.get(name))
     configure_logging()
     configure_telemetry()
-    config = load_config(config_path, mode=mode)
-    # Register secrets with the log scrubber before anything can log them.
-    for name in ("HELIUS_API_KEY", "POSTHOG_API_KEY", "OPENROUTER_API_KEY"):
-        register_secret(os.environ.get(name))
-    return config
+    return load_config(config_path, mode=mode)
 
 
 def _resolve_token(config: RunConfig) -> str:
