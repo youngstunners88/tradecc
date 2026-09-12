@@ -20,7 +20,11 @@ decisions that contradict it.
 - **Swap/routing:** Jupiter (Swap API or Ultra API).
 - **Strategy v0.1:** Momentum / technical-analysis (EMA/RSI based) —
   chosen first because it's self-contained and fully backtestable without
-  depending on sourcing a trustworthy wallet to copy.
+  depending on sourcing a trustworthy wallet to copy. **CLOSED 2026-09-12:
+  tested six ways, no demonstrated edge, beaten by buy-and-hold on every
+  interval. Do not tune it further and do not build live execution on it** —
+  see `planning/decisions/2026-09-12-kill-ema-rsi-momentum.md`. The
+  infrastructure built around it stands; the signal does not.
 - **Strategy v0.2 (later):** Copy-trading / wallet-following — the
   execution and risk engine should be built so this can plug in without a
   rewrite.

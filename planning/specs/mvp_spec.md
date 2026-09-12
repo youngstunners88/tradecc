@@ -1,5 +1,16 @@
 # MVP Spec — v0.1: Solana Momentum Bot (Paper-Trading First)
 
+> **Status update, 2026-09-12 — the v0.1 momentum strategy is CLOSED with no
+> demonstrated edge.** Six independent protocol-bound tests converged negative
+> and buy-and-hold beat it on every interval. See
+> `planning/decisions/2026-09-12-kill-ema-rsi-momentum.md`.
+>
+> The *infrastructure* below (backtest and paper modes, risk engine, cost
+> model, validation gate) stands and is reusable. The *strategy* it was built
+> to validate does not. The validation gate stays in force for whatever
+> strategy comes next, and remains incomplete until a decision record sets the
+> max-drawdown threshold it requires.
+
 ## Overview
 Build a Solana trading bot that trades a single momentum/TA strategy at
 small position sizes, defaults to **paper trading** (simulated fills
