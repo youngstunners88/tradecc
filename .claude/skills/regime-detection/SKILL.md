@@ -1,30 +1,71 @@
 ---
 name: regime-detection
-description: Classify market regime (trend / chop / volatility) and condition strategy behaviour on it — the most defensible explanation for why the momentum sweep failed on held-out data. Use when adding regime logic, deciding whether to trade at all in a given window, or extending the parameter search. Carries the anti-overfit protocol, because regime conditioning multiplies the search space and is the fastest way to manufacture a fake edge.
+description: Classify market regime (trend / chop / volatility) and condition strategy behaviour on it. REFUTED on the v0.1 momentum strategy — the mechanism check found an empty trend arm, so this skill is dormant for that strategy and live only for a future strategy whose entries actually land in trend-labelled bars. Read it for the mechanism-check protocol and the anti-overfit rules, which are general and still binding. Carries the anti-overfit protocol, because regime conditioning multiplies the search space and is the fastest way to manufacture a fake edge.
 ---
 
 # Regime detection
 
+## Status: hypothesis refuted on current data (2026-09-12)
+
+**Do not treat this skill as live work on the v0.1 momentum strategy.** Its
+own step-4 mechanism check was run before any parameter was tried, and it
+failed at the premise:
+
+> One trade out of 59 was entered in a trend-labelled bar. 1h and 4h had an
+> **empty trend arm** (n=0); 15m had n=1.
+
+Measurement, harness and full numbers:
+`research/backtests/2026-09-12_regime-detection-pre-registration.md` and
+`research/regime_check.py`.
+
+**Reopening condition.** This skill becomes live again only when a strategy
+exists whose entries actually land in trend-labelled bars — that is a property
+of the *strategy*, not of the regime layer. Re-run the mechanism check against
+that strategy first. Until then, the sections below are kept for the
+classifier notes, the anti-overfit protocol, and the look-ahead constraints,
+all of which remain correct and apply to any future conditioning work.
+
 ## Why this exists
 
-The held-out sweep found **no net edge at $10**, and the shape of the
-failure is informative. 78–88% of the parameter space lost money *on the
-range it was tuned on*. The 1h winner was `fast_ema=20` against
-`slow_ema=21` — two averages that track each other almost exactly, so it
-fired on noise.
+It was written on the hypothesis that the momentum failure was a
+regime-blindness failure: that the strategy earns in trends and bleeds in
+ranges, traded identically in both, and could be rescued by standing down in
+chop.
 
-That is what an EMA crossover does in a chopping market: it crosses
-constantly, pays the full cost stack each time, and gives back more than
-it makes. Momentum strategies have a known mechanism — they earn in
-trends and bleed in ranges. The v0.1 bot **traded identically in both.**
+**That hypothesis has been measured and is wrong**, in a specific and more
+informative way than "it did not help."
 
-So regime conditioning is not a new indicator bolted on in hope. It is
-the specific hypothesis that matches the observed failure: *the
-strategy's losses are concentrated in a market state that is
-identifiable in advance.*
+Labelling history by Kaufman efficiency ratio (window 20, threshold 0.4 named
+before running) at default parameters:
 
-That hypothesis is testable, and it might be false. Treat it as a
-hypothesis until the held-out data says otherwise.
+| Interval | trades | TREND arm | CHOP arm |
+|---|---|---|---|
+| 1h | 15 | **n=0** | n=15, exp +0.0388 |
+| 4h | 21 | **n=0** | n=21, exp −0.0262 |
+| 15m | 23 | n=1 | n=22, exp −0.0756 |
+
+The classifier is not the problem — labels flip 34–78 times per series, so a
+regime boundary genuinely exists in the data. The problem is that **the
+strategy never trades in trends at all.** It enters at *below-median*
+efficiency on every interval: 1h all-bars median 0.174 against an entry median
+of 0.137, and the most efficient bar it ever entered on scored 0.232 against an
+all-bars p90 of 0.404.
+
+The likely mechanical cause is already in the code: **the RSI-overbought filter
+suppresses entries exactly when a clean directional move has driven RSI up.**
+The strategy is structurally barred from entering the state this skill says it
+should be trading in, which makes a regime filter largely redundant with a
+filter the bot already has.
+
+So a chop filter would not improve the strategy's trades. At ER ≥ 0.4 it
+removes 58 of 59 of them, and any lower cutoff that keeps trades is a fitted
+cutoff — the exact noise-fitting the protocol below exists to prevent.
+
+Two further claims in the original text were stale rather than wrong, and are
+retired with it: the "78–88% of the parameter space lost money" framing
+predates the cost-model correction and the walk-forward work, and this skill
+was written without knowledge that **buy-and-hold beats the strategy on every
+interval**, which is a more fundamental problem than regime blindness.
 
 ## The honest framing of "where will the market move"
 
@@ -99,19 +140,46 @@ Therefore, binding rules:
 3. **Regime thresholds are parameters and count against the budget.**
    A "filter" with a tuned cutoff is not free; it is the same search in
    different clothing.
-4. **Test the mechanism, not just the P&L.** Before optimising anything,
-   check the claim directly: label the existing history by regime and
-   compare expectancy in trend-labelled windows against chop-labelled
-   windows, at the **default** parameters. If the gap is not there at
-   defaults, regime conditioning is not the explanation, and tuning until
-   it appears is fitting noise.
+4. **Test the mechanism, not just the P&L.** See *The mechanism check* below
+   — it is now stated strategy-agnostically, because it generalises past
+   regimes and because it is the step that refuted this skill.
 5. **Report trade counts beside every result.** The prior sweep produced
    "+$0.47 on 3 trades." A filter that stands down most of the time will
    produce very few trades — and few trades cannot distinguish skill from
    luck, whichever direction they point.
 
 Step 4 is the cheapest and most informative thing in this file. Do it
-first, and be prepared for it to say no.
+first, and be prepared for it to say no. It said no here.
+
+## The mechanism check (general protocol)
+
+Not specific to regimes. **Before conditioning any strategy on any new state
+variable — regime, liquidity band, time of day, funding rate, wallet cohort —
+run this first.** It costs one backtest and it is the only step that can
+refute a conditioning idea before a parameter search makes it unfalsifiable.
+
+1. **Name the state variable and its split point in advance**, in writing,
+   before computing anything. A cutoff chosen after seeing the split is a
+   fitted parameter, not a filter.
+2. **Run the strategy at default parameters** over existing history. Change
+   nothing. The check is about where the strategy already trades, not about
+   what it could be tuned to do.
+3. **Label each trade by the state variable at its entry bar**, computed from
+   closed candles up to and including that bar only.
+4. **Check both arms are non-empty first.** An empty arm means the hypothesis
+   is untestable on this data, not that it failed — and untestable is where
+   you stop, because there is nothing to compare.
+5. **Compare expectancy across arms, with trade counts beside every number.**
+   A gap on n<10 per arm is not a gap.
+6. **Report the answer whichever way it falls**, in
+   `research/backtests/`. A post-hoc split may be reported alongside, but only
+   labelled as post-hoc, so it cannot later be presented as a finding.
+
+If the gap is not there at defaults, the conditioning idea is not the
+explanation, and tuning until it appears is fitting noise. If one arm is
+empty, the premise itself is contradicted — which is a stronger result than a
+negative P&L, because it removes the idea from the list rather than leaving it
+open as untested.
 
 ## Where regime output goes
 
@@ -129,6 +197,10 @@ other indicator:
   else — otherwise the paper run is evidence about a different system.
 
 ## What would make this worth keeping
+
+Unreachable on the v0.1 momentum strategy rather than unmet — the first
+condition below cannot be computed when one arm is empty. Kept as the bar for
+whatever strategy reopens this skill.
 
 Set the bar before running, not after:
 
