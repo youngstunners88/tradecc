@@ -153,33 +153,10 @@ first, and be prepared for it to say no. It said no here.
 
 ## The mechanism check (general protocol)
 
-Not specific to regimes. **Before conditioning any strategy on any new state
-variable — regime, liquidity band, time of day, funding rate, wallet cohort —
-run this first.** It costs one backtest and it is the only step that can
-refute a conditioning idea before a parameter search makes it unfalsifiable.
-
-1. **Name the state variable and its split point in advance**, in writing,
-   before computing anything. A cutoff chosen after seeing the split is a
-   fitted parameter, not a filter.
-2. **Run the strategy at default parameters** over existing history. Change
-   nothing. The check is about where the strategy already trades, not about
-   what it could be tuned to do.
-3. **Label each trade by the state variable at its entry bar**, computed from
-   closed candles up to and including that bar only.
-4. **Check both arms are non-empty first.** An empty arm means the hypothesis
-   is untestable on this data, not that it failed — and untestable is where
-   you stop, because there is nothing to compare.
-5. **Compare expectancy across arms, with trade counts beside every number.**
-   A gap on n<10 per arm is not a gap.
-6. **Report the answer whichever way it falls**, in
-   `research/backtests/`. A post-hoc split may be reported alongside, but only
-   labelled as post-hoc, so it cannot later be presented as a finding.
-
-If the gap is not there at defaults, the conditioning idea is not the
-explanation, and tuning until it appears is fitting noise. If one arm is
-empty, the premise itself is contradicted — which is a stronger result than a
-negative P&L, because it removes the idea from the list rather than leaving it
-open as untested.
+Extracted to `.claude/skills/mechanism-check/SKILL.md` so it applies to any
+conditioning idea, not just regimes. **Run it before any parameter search.**
+The regime-detection hypothesis was refuted by this step; the protocol is the
+durable output of that work.
 
 ## Where regime output goes
 
