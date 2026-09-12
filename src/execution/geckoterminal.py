@@ -110,6 +110,11 @@ def _to_candle(row: Any) -> Candle:
         # Values arrive as JSON floats; str() first so the Decimal is the
         # number as printed, not the binary approximation behind it.
         values = [Decimal(str(value)) for value in row[1:6]]
+        # json.loads parses bare NaN/Infinity by default. A NaN close would
+        # propagate into every indicator and produce silence or nonsense
+        # rather than an error, so reject the row instead.
+        if any(not value.is_finite() for value in values):
+            raise ValueError("non-finite OHLCV value")
     except (TypeError, ValueError, ArithmeticError) as exc:
         raise ProviderError(PROVIDER, f"malformed OHLCV row: {row!r}") from exc
 

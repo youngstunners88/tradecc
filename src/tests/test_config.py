@@ -166,3 +166,17 @@ def test_shipped_configs_are_valid():
     root = Path(__file__).resolve().parents[2]
     for name in ("config.backtest.yaml", "config.paper.yaml", "config.live.yaml"):
         assert load_config(root / name, env={}).risk.position_size_usd <= Decimal("10")
+
+
+def test_non_finite_risk_limits_are_rejected(tmp_path):
+    """NaN satisfied every guard: `NaN <= 0`, `NaN > ceiling` and
+    `NaN > daily_loss_limit_usd` are all False, so a NaN position size
+    started the bot with no enforced cap and no override acknowledgement."""
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    from core.config import RiskConfig
+
+    for bad in ("NaN", "Infinity", "-Infinity"):
+        with _pytest.raises(ValidationError):
+            RiskConfig(position_size_usd=bad)

@@ -433,3 +433,54 @@ def test_only_in_progress_bars_means_insufficient_history(config, strategy):
 
     assert result.action == "insufficient_history"
     assert result.trade is None
+
+
+def test_sell_quote_is_sized_in_the_token_held_not_the_quote_asset(config, strategy):
+    """A SELL sends the TOKEN as input, so amount_atomic must be the token
+    quantity in the token's decimals.
+
+    This used to reuse the BUY form — size_usd scaled by quote_mint_decimals —
+    which on SOL/USDC asked Jupiter to price selling 0.01 SOL for a position
+    holding 0.098. Exit prices in paper then came from a quote for a different
+    trade than the one simulated, and paper P&L is what the 30-day gate rests
+    on.
+    """
+    from decimal import Decimal
+
+    from core.types import Side
+
+    captured: dict = {}
+
+    mock = MockQuoteSource(slippage_pct=Decimal("0.2"))
+
+    class CapturingQuotes:
+        def get_quote(self, **kwargs):
+            captured.update(kwargs)
+            return mock.get_quote(**kwargs)
+
+    paper_trader, _ = trader(config, strategy, candles([100, 101]), quotes=CapturingQuotes())
+
+    entry_price = Decimal("101.79")
+    size_usd = Decimal("10")
+    paper_trader._live_quote(TOKEN, Side.SELL, size_usd, entry_price=entry_price)
+
+    expected_quantity = size_usd / entry_price
+    decimals = config.paper.token_mint_decimals
+    assert captured["amount_atomic"] == int(expected_quantity * (Decimal(10) ** decimals))
+    assert captured["input_mint"] == TOKEN
+
+    # The old, wrong value, pinned so a regression is unambiguous.
+    wrong = int(size_usd * (Decimal(10) ** config.paper.quote_mint_decimals))
+    assert captured["amount_atomic"] != wrong
+
+
+def test_sell_quote_refuses_without_an_entry_price(config, strategy):
+    """Silently falling back to a USD-shaped amount is what caused the bug."""
+    import pytest as _pytest
+    from decimal import Decimal
+
+    from core.types import Side
+
+    paper_trader, _ = trader(config, strategy, candles([100, 101]))
+    with _pytest.raises(ValueError):
+        paper_trader._live_quote(TOKEN, Side.SELL, Decimal("10"))

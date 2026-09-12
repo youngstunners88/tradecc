@@ -172,7 +172,13 @@ def _price_impact_pct(payload: dict[str, Any]) -> Decimal:
 def _required_int(payload: dict[str, Any], key: str) -> int:
     if key not in payload:
         raise ProviderError(PROVIDER, f"quote response missing {key!r}")
+    raw = payload[key]
+    # int() would accept True as 1 and silently truncate 1.9 to 1. Atomic
+    # amounts are exact quantities; a truncated or coerced one makes the
+    # quoted price, the slippage check and the fill all quietly wrong.
+    if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+        raise ProviderError(PROVIDER, f"{key!r} was not an integer: {raw!r}")
     try:
-        return int(payload[key])
+        return int(raw)
     except (TypeError, ValueError) as exc:
-        raise ProviderError(PROVIDER, f"{key!r} was not an integer: {payload[key]!r}") from exc
+        raise ProviderError(PROVIDER, f"{key!r} was not an integer: {raw!r}") from exc

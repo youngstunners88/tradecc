@@ -84,8 +84,12 @@ def test_each_rejection_reason_gets_its_own_event(engine, sink, now):
 
 
 def test_unlocked_live_trade_emits_no_gate_refusal(run_config, store, sink, now):
+    # Live-configured, because a LIVE intent on a PAPER-configured engine is
+    # now refused outright — see test_paper_configured_engine_refuses_a_live
+    # _intent in test_risk_engine.py.
     run_config.gate_file.write_text(json.dumps(VALID_GATE))
+    live = run_config.model_copy(update={"mode": Mode.LIVE})
 
-    RiskEngine(run_config, store).approve(make_intent(mode=Mode.LIVE), now)
+    RiskEngine(live, store).approve(make_intent(mode=Mode.LIVE), now)
 
     assert sink.names() == []

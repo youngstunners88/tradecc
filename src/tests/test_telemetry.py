@@ -135,3 +135,20 @@ def test_disabled_telemetry_still_returns_redacted_payload():
     payload = telemetry.track("gate.live_mode_refused", api_key=FAKE_KEY)
 
     assert payload["api_key"] == REDACTED
+
+
+def test_withheld_fields_are_dropped_at_every_depth():
+    """A top-level-only filter let {"context": {"wallet_address": ...}}
+    through, sending PostHog exactly the field the list exists to keep local."""
+    from core.telemetry import for_telemetry
+
+    out = for_telemetry(
+        {
+            "wallet_address": "top",
+            "context": {"wallet_address": "nested", "ok": 1},
+            "items": [{"pubkey": "deep", "keep": 2}],
+        }
+    )
+    assert "wallet_address" not in out
+    assert out["context"] == {"ok": 1}
+    assert out["items"] == [{"keep": 2}]

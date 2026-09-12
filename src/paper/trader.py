@@ -208,7 +208,9 @@ class PaperTrader:
         else:
             return TickResult(moment, "holding_position", signal=signal.type)
 
-        quote = self._live_quote(state.token_mint, Side.SELL, position.size_usd)
+        quote = self._live_quote(
+            state.token_mint, Side.SELL, position.size_usd, entry_price=position.entry_price
+        )
         fill = self._fills.simulate(
             quote,
             position.size_usd,
@@ -244,16 +246,40 @@ class PaperTrader:
         )
         return TickResult(moment, "exited", detail=reason, signal=signal.type, trade=trade)
 
-    def _live_quote(self, token_mint: str, side: Side, size_usd: Decimal) -> Quote:
-        """A real Jupiter quote. Reading a price sends nothing."""
+    def _live_quote(
+        self,
+        token_mint: str,
+        side: Side,
+        size_usd: Decimal,
+        entry_price: Decimal | None = None,
+    ) -> Quote:
+        """A real Jupiter quote. Reading a price sends nothing.
+
+        The input amount must be denominated in the INPUT mint. A BUY spends
+        the quote asset, so `size_usd` scaled by `quote_mint_decimals` is
+        right. A SELL sends the token, so it must be the token quantity held,
+        scaled by the token's own decimals.
+
+        This previously used the quote-asset form for both. On the configured
+        SOL/USDC pair that asked Jupiter to price selling 0.01 SOL when the
+        position held 0.098 — a 9.8x understatement, and worse on any token
+        whose price and decimals differ further from USDC's. Exit prices in
+        paper therefore came from a quote for a trade that was not the one
+        being simulated, and paper P&L is the evidence the 30-day gate rests
+        on.
+        """
         paper = self._config.paper
-        amount_atomic = int(size_usd * (Decimal(10) ** paper.quote_mint_decimals))
         slippage_bps = int(self._config.risk.max_slippage_pct * Decimal(100))
 
         if side is Side.BUY:
             input_mint, output_mint = paper.quote_mint, token_mint
+            amount_atomic = int(size_usd * (Decimal(10) ** paper.quote_mint_decimals))
         else:
             input_mint, output_mint = token_mint, paper.quote_mint
+            if entry_price is None or entry_price <= 0:
+                raise ValueError("a SELL quote needs the entry price to size the token amount")
+            quantity = size_usd / entry_price
+            amount_atomic = int(quantity * (Decimal(10) ** paper.token_mint_decimals))
 
         return self._quotes.get_quote(
             input_mint=input_mint,

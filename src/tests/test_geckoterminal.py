@@ -199,3 +199,17 @@ def test_cache_path_is_sanitised(tmp_path):
 
     assert tmp_path in path.parents
     assert ".." not in path.name
+
+
+def test_non_finite_ohlcv_is_a_provider_error():
+    """json.loads parses bare NaN/Infinity. A NaN close would propagate into
+    every indicator and produce silence or nonsense rather than an error."""
+    import pytest as _pytest
+
+    from execution.geckoterminal import _to_candle
+    from execution.http import ProviderError
+
+    with _pytest.raises(ProviderError):
+        _to_candle([1757000000, float("nan"), 1, 1, 1, 1])
+    with _pytest.raises(ProviderError):
+        _to_candle([1757000000, 1, float("inf"), 1, 1, 1])

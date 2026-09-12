@@ -48,8 +48,26 @@ def _is_withheld_from_telemetry(key: str) -> bool:
 
 
 def for_telemetry(payload: dict[str, Any]) -> dict[str, Any]:
-    """Drop locals-only fields from an already-redacted payload."""
-    return {k: v for k, v in payload.items() if not _is_withheld_from_telemetry(k)}
+    """Drop locals-only fields from an already-redacted payload.
+
+    Applied at every depth. A top-level-only filter let a nested payload such
+    as `{"context": {"wallet_address": ...}}` through, because the key it
+    inspected was `context` — sending to PostHog exactly the field this list
+    exists to keep local.
+    """
+    return _narrow(payload)
+
+
+def _narrow(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            k: _narrow(v)
+            for k, v in value.items()
+            if not _is_withheld_from_telemetry(str(k))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_narrow(v) for v in value]
+    return value
 
 
 class EventSink(Protocol):

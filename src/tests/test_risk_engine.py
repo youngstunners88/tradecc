@@ -18,6 +18,13 @@ def engine(run_config, store) -> RiskEngine:
     return RiskEngine(run_config, store)
 
 
+def live_config(run_config):
+    """The same config, configured for live. A LIVE intent belongs to a
+    live-configured engine; pairing a PAPER engine with a LIVE intent is the
+    inconsistency `_check_live_gate` now refuses outright."""
+    return run_config.model_copy(update={"mode": Mode.LIVE})
+
+
 def test_approves_a_clean_intent(engine, now):
     assert engine.approve(make_intent(), now).approved
 
@@ -89,9 +96,34 @@ def test_live_mode_refused_when_gate_unsatisfied(run_config, store, now):
 
 def test_live_mode_allowed_only_once_gate_is_fully_satisfied(run_config, store, now):
     run_config.gate_file.write_text(json.dumps(VALID_GATE))
-    engine = RiskEngine(run_config, store)
+    engine = RiskEngine(live_config(run_config), store)
 
     assert engine.approve(make_intent(mode=Mode.LIVE), now).approved
+
+
+def test_paper_configured_engine_refuses_a_live_intent(run_config, store, now):
+    """The gate used to be keyed on the caller-supplied intent.mode, so a
+    paper-configured engine would evaluate — and could approve — a live
+    trade whenever the gate file happened to be satisfied."""
+    run_config.gate_file.write_text(json.dumps(VALID_GATE))
+    engine = RiskEngine(run_config, store)  # configured PAPER
+
+    decision = engine.approve(make_intent(mode=Mode.LIVE), now)
+
+    assert not decision.approved
+    assert RejectionCode.LIVE_GATE_NOT_MET in decision.codes
+
+
+def test_live_configured_engine_refuses_an_intent_claiming_paper(run_config, store, now):
+    """The dangerous direction: once signing exists, a live-configured
+    process must not execute an intent that claims to be paper."""
+    run_config.gate_file.write_text(json.dumps(VALID_GATE))
+    engine = RiskEngine(live_config(run_config), store)
+
+    decision = engine.approve(make_intent(mode=Mode.PAPER), now)
+
+    assert not decision.approved
+    assert RejectionCode.LIVE_GATE_NOT_MET in decision.codes
 
 
 def test_satisfied_gate_does_not_bypass_other_risk_checks(run_config, store, now):

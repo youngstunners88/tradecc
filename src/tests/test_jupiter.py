@@ -216,3 +216,18 @@ def test_non_numeric_price_impact_is_a_provider_error():
 
     with pytest.raises(ProviderError):
         get_detailed(FakeTransport(response(200, payload)))
+
+
+def test_atomic_amounts_reject_bool_and_float():
+    """int() accepted True as 1 and truncated 1.9 to 1, making the quoted
+    price, the slippage check and the fill all quietly wrong."""
+    import pytest as _pytest
+
+    from execution.jupiter import _required_int
+    from execution.http import ProviderError
+
+    for bad in (True, False, 1.9, None, [1]):
+        with _pytest.raises(ProviderError):
+            _required_int({"outAmount": bad}, "outAmount")
+    assert _required_int({"outAmount": "1900"}, "outAmount") == 1900
+    assert _required_int({"outAmount": 1900}, "outAmount") == 1900

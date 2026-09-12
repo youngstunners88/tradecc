@@ -121,8 +121,23 @@ class RiskEngine:
         return state
 
     def _check_live_gate(self, intent: TradeIntent) -> RiskDecision:
-        if intent.mode is not Mode.LIVE:
+        """Gate on the engine's OWN configured mode, not the intent's.
+
+        This used to read `intent.mode`, which is supplied by the caller. Both
+        current callers pass `config.mode`, so nothing was bypassed — but it
+        meant the live gate was keyed on a field the caller chooses. Once
+        signing exists, a `TradeIntent` built with `mode=PAPER` inside a
+        live-configured process would have skipped the gate entirely and sent
+        a real transaction. The engine's configuration is the authority.
+        """
+        if self._config.mode is not Mode.LIVE and intent.mode is not Mode.LIVE:
             return RiskDecision.approve()
+        if intent.mode is not self._config.mode:
+            return RiskDecision.reject(
+                RejectionCode.LIVE_GATE_NOT_MET,
+                f"intent mode {intent.mode.value!r} does not match configured mode "
+                f"{self._config.mode.value!r} — refusing to infer which is authoritative",
+            )
         result = self.live_gate()
         if result.unlocked:
             return RiskDecision.approve()

@@ -57,10 +57,19 @@ class RiskConfig(StrictModel):
     def _to_decimal(cls, value: Any) -> Decimal:
         # Route through str so YAML floats (0.5 -> 0.5000000000000000277…)
         # do not smuggle binary rounding error into a risk threshold.
+        #
+        # Non-finite values are rejected here rather than downstream: NaN
+        # silently satisfies every guard below, because `NaN <= 0`,
+        # `NaN > ceiling` and `NaN > daily_loss_limit_usd` are all False. A
+        # `position_size_usd: NaN` would start the bot with no enforced size
+        # cap and no override acknowledgement.
         try:
-            return Decimal(str(value))
+            parsed = Decimal(str(value))
         except InvalidOperation as exc:
             raise ValueError(f"not a valid decimal: {value!r}") from exc
+        if not parsed.is_finite():
+            raise ValueError(f"must be a finite decimal, got {value!r}")
+        return parsed
 
     @field_validator(
         "position_size_usd",
@@ -133,11 +142,15 @@ class PaperConfig(StrictModel):
     # USDC on Solana — the asset positions are denominated in.
     quote_mint: str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
     quote_mint_decimals: int = 6
+    # The traded token's own decimals. A SELL sends the TOKEN as input, so
+    # its amount must be scaled by this, not by quote_mint_decimals.
+    # Defaults to 9 for wrapped SOL, the configured pair.
+    token_mint_decimals: int = 9
     # GeckoTerminal pool address for candle polling.
     pool_address: str = ""
     poll_seconds: int = 300
 
-    @field_validator("quote_mint_decimals", "poll_seconds")
+    @field_validator("quote_mint_decimals", "token_mint_decimals", "poll_seconds")
     @classmethod
     def _positive(cls, value: int) -> int:
         if value <= 0:
@@ -187,9 +200,12 @@ class BacktestConfig(StrictModel):
     @classmethod
     def _to_decimal(cls, value: Any) -> Decimal:
         try:
-            return Decimal(str(value))
+            parsed = Decimal(str(value))
         except InvalidOperation as exc:
             raise ValueError(f"not a valid decimal: {value!r}") from exc
+        if not parsed.is_finite():
+            raise ValueError(f"must be a finite decimal, got {value!r}")
+        return parsed
 
     @field_validator("initial_capital_usd")
     @classmethod
