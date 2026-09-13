@@ -3,8 +3,17 @@
 **Date:** 2026-09-12
 **Author:** DeepSeek (`deepseek/deepseek-v4.1-flash` via OpenRouter), commissioned
 as an independent review before the `astra-analyst` skill is reviewed in-house.
-**Status:** findings recorded, **not yet actioned.** No mitigation below has been
-applied. `astra-analyst` remains unmerged and unimplemented.
+**Status:** **C1, C2, M4 and L2 actioned 2026-09-13** in
+`.claude/skills/astra-analyst/SKILL.md`: side-effecting tools forbidden with the
+reasoning recorded; prompt construction inverted to an explicit field allowlist,
+with `redact()`'s actual scope stated; the caller-side rule written down (only
+`candidate` permits a trade, everything else suppresses); and config, risk
+limits and the live gate declared off-limits to model output.
+
+The remaining findings (H1–H3, M1–M3, L1, L3) are **not actioned** — they govern
+runtime behaviour of a module that does not exist. `astra-analyst` ships
+DORMANT and unwired; they become binding the moment it is activated, and the
+skill says so.
 
 **Verification note.** Four load-bearing claims were checked against the code
 before recording: C1 (the skill contains no mention of tools or function

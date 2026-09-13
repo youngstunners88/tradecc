@@ -5,6 +5,25 @@ description: Wire GPT-6 Astra (via OpenRouter) into TradeCC as a research analys
 
 # Astra as an analyst, not an oracle
 
+## Status: DORMANT — nothing to analyse (2026-09-13)
+
+**Built, reviewed, hardened, and deliberately not wired up.** Every use this
+skill lists has had its subject removed:
+
+| Stated use | Status |
+|---|---|
+| Score copy-trading candidates | Blocked — `2026-09-13-copy-trading-wallet-universe.md` |
+| Regime write-ups | Refuted — `2026-09-12-regime-detection-pre-registration.md` |
+| Feature hypotheses | Would enter the protocol that has already killed five ideas |
+| Backtest summaries, incident reports | Nothing is running |
+
+Wiring an LLM into a system with no strategy would spend money generating
+hypotheses faster than they can be validated — and the constraint here has
+never been hypothesis supply. **Activate only when a signal worth analysing
+exists.** The pricing table below was verified 2026-09-10 and must be
+re-verified before any call is made.
+
+
 Extends the `openrouter` skill, which holds auth, endpoint, and cost
 mechanics. Read that first. This file governs **what Astra is allowed to
 decide**, which is the part that can lose money.
@@ -56,6 +75,24 @@ Astra **may never**:
 - Emit a buy or sell that reaches execution.
 - Widen a risk limit, resize a position, or influence the live gate.
 - Be consulted inside the signal path at runtime.
+- **Hold any tool with side effects.** No function-calling that writes files,
+  sends requests, reads the environment, or invokes anything under
+  `src/execution/`, `src/risk/`, or the config loader.
+
+### Why the tool prohibition is load-bearing
+
+The asymmetry argument holds *only because a veto is the model's maximum
+authority*. Grant it a tool and a successful prompt injection escalates from
+"wrong verdict" — bounded, one missed trade — to "arbitrary action", which is
+unbounded. The threat review
+(`planning/architecture/astra-analyst-threat-review.md`, finding C1) rates this
+the most dangerous gap in the design.
+
+If a read-only tool is ever added, it must be: host-allowlisted; unable to
+reach `localhost`, RFC1918 addresses, or any secrets store; re-delimited as
+untrusted input before its output re-enters a prompt; and covered by an
+import-boundary test asserting the Astra module cannot reach execution, risk,
+or config code.
 
 ## Propose, then dispose
 
@@ -115,6 +152,16 @@ Three deliberate choices:
 - **`extra="forbid"`**, matching the config layer's existing strictness —
   a field the schema does not know about is an error, not a shrug.
 
+### The caller-side rule (M4)
+
+**Only `candidate` permits a trade to proceed. Every other verdict — `reject`,
+`insufficient_evidence` — and every validation failure, timeout, or absent
+assessment suppresses.** `insufficient_evidence` is not a shrug to be treated
+as a pass; it is the answer the schema expects most of the time, and reading it
+as permission silently inverts the fail-closed property the whole design rests
+on. A caller that cannot state which branch it takes for each of the three
+verdicts is not ready to call Astra.
+
 Log the **exact model ID and the prompt hash** with every assessment. Two
 wallets scored under different model versions were not scored by the same
 process, and without the ID you cannot tell which is which later.
@@ -139,8 +186,21 @@ A token's own website can contain text aimed at a model reading it. So:
    that is the maximum authority the model holds. This is the strongest
    argument for the asymmetry: it turns a prompt-injection compromise
    from a capital loss into a missed opportunity.
-4. **Never place secrets in a prompt.** Per `openrouter`, run any payload
-   built from runtime state through `core.logging.redact()` first.
+4. **Never place secrets in a prompt — build prompts from an allowlist.**
+   Construct every prompt from an *explicit list of permitted fields* (address,
+   symbol, chain, timestamp, a bounded set of on-chain metrics). Never from
+   "runtime state minus redactions".
+
+   `core.logging.redact()` is a **logging** scrubber, not a prompt sanitiser.
+   It masks known-sensitive *field names* and any value passed to
+   `register_secret()` — but a prompt is free text, where only registered
+   values are replaced. A key that was never registered, or one embedded in
+   prose, passes straight through. Treating it as general-purpose sanitisation
+   is finding C2 of the threat review.
+
+   Register every secret at startup so `redact()` is a second line of defence,
+   never the first. `cli._bootstrap` already registers before anything reads
+   the environment.
 
 ## Failure handling and cost
 
@@ -154,6 +214,21 @@ loop costs more than the trading it supports. Set `max_tokens` on every
 call, prefer `:batch`, and structure prompts so the shared prefix is
 cacheable — cache reads are 10× cheaper than fresh input. A nightly batch
 job over a stable corpus is the right shape; a call per tick is not.
+
+## What Astra output may never reach (L2)
+
+Stated explicitly because "it only advises" erodes:
+
+- **Config loading.** No model-suggested value is ever fed to `load_config`,
+  and nothing Astra emits becomes a default, a threshold, or a parameter
+  without a human freezing it into code first.
+- **Risk limits and position sizing.** Unchanged by anything Astra says.
+- **The live gate.** Astra cannot supply, alter, or influence any field in the
+  gate file — including `trade_count` and `validated_fingerprint`, whose whole
+  purpose is to be evidence rather than assertion.
+
+These belong in an import-boundary test when the module is built, not only in
+prose.
 
 ## Where this leaves the v0.1 rule
 
