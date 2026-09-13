@@ -1,6 +1,7 @@
 {
   "_comment": "Template for ops/live-gate.json. Copy, fill with REAL measured results, and commit as an audit record. Every field is checked by core/gate.py; a missing or malformed field leaves live mode locked. See .claude/skills/tradecc-paper-validation/references/gate-checklist.md for how to produce each value.",
 
+  "_max_drawdown_note": "PLACEHOLDER. The real value comes from planning/decisions/2026-09-13-max-drawdown-threshold.md, which proposes 8% and is NOT YET LOCKED. The 15 previously shown here was decoration: reaching it takes a net 29 worst-case losing trades at the configured $10 size and 5% stop, against recorded backtest drawdowns of 0.53%-1.24%. A threshold that cannot fail is not a gate. threshold_set_at must predate paper_started_at or the gate refuses.",
   "threshold_set_at": "2026-09-09T10:00:00+00:00",
   "max_drawdown_threshold_pct": 15,
 
@@ -14,13 +15,14 @@
   "trade_count": 0,
 
   "_validated_fingerprint_note": "Binds this approval to the exact strategy and limits it was granted against, so a gate approved for one configuration cannot unlock a different one. Generate with the command in gate-checklist.md and paste the result verbatim. The digests below are placeholders and WILL fail until regenerated against your own config.",
-  "_validated_fingerprint_covers": "strategy (name, params, token_mints); risk (all fields); costs (all fields); execution_assumptions (backtest.price_impact_pct and backtest.execution_slippage_pct — the adverse-price assumptions the expectancy figure was computed under).",
+  "_validated_fingerprint_covers": "strategy (name, params, token_mints); risk (all fields); costs (all fields); execution_assumptions (backtest.price_impact_pct and backtest.execution_slippage_pct — the adverse-price assumptions the expectancy figure was computed under); capital_base (backtest.initial_capital_usd — the denominator of every drawdown percentage, so raising it after approval cannot shrink an observed drawdown past the threshold).",
   "_validated_fingerprint_excludes": "state_dir, gate_file, data.cache_dir, paper.poll_seconds. These are locations and polling cadence: they do not change what was validated, so moving the bot to another machine or retuning the poll interval must not invalidate an approval. A gate that fails for reasons unrelated to the evidence gets worked around, which is worse than one that never fires.",
   "validated_fingerprint": {
     "strategy": "REPLACE-ME",
     "risk": "REPLACE-ME",
     "costs": "REPLACE-ME",
-    "execution_assumptions": "REPLACE-ME"
+    "execution_assumptions": "REPLACE-ME",
+    "capital_base": "REPLACE-ME"
   },
 
   "approved_by": "",

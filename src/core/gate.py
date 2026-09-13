@@ -29,11 +29,36 @@ from core.types import finite_decimal
 
 MINIMUM_PAPER_TRADING_DAYS = 30
 
+# Stable prefixes for the fingerprint failures. `GateResult.fingerprint_mismatch`
+# reads these rather than matching on prose, so rewording a message cannot
+# silently stop an alert from firing. Any new fingerprint failure must be added
+# here as well as raised.
+FINGERPRINT_FAILURE_PREFIXES = (
+    "validated_fingerprint missing",
+    "configuration changed since approval",
+    "validated_fingerprint has unrecognised sections",
+)
+
 
 @dataclass(frozen=True)
 class GateResult:
     unlocked: bool
     failures: tuple[str, ...]
+
+    @property
+    def fingerprint_mismatch(self) -> bool:
+        """True when the approval no longer binds to the running configuration.
+
+        Separated from the other failures because it means something different:
+        the other checks say "the evidence is not there yet", this one says
+        "the evidence is for a different bot". It is the one gate failure that
+        can appear *after* an approval that previously passed.
+        """
+        return any(
+            failure.startswith(prefix)
+            for failure in self.failures
+            for prefix in FINGERPRINT_FAILURE_PREFIXES
+        )
 
     def describe(self) -> str:
         if self.unlocked:

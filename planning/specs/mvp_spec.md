@@ -122,3 +122,9 @@ the reasoning behind each.
 - **Max-drawdown threshold for the validation gate.** Must be recorded
   in a decision record *before* the 30-day paper clock starts. Until it
   is, the validation gate is incomplete and `live` mode stays locked.
+  **Drafted 2026-09-13** in
+  `planning/decisions/2026-09-13-max-drawdown-threshold.md`, which proposes
+  **8%** with its derivation and remains **unlocked pending sign-off**. That
+  record also fixed the denominator: `backtest.initial_capital_usd` is now a
+  fingerprinted section, because a percentage threshold against an unpinned
+  capital base is not a gate.

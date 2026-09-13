@@ -386,7 +386,13 @@ def _mode_from_env(env: dict[str, str]) -> Mode | None:
 # paper.poll_seconds. Paths and polling cadence do not change what was
 # validated, and including them would break the gate on a machine move or a
 # harmless cadence tweak — a gate that cries wolf gets worked around.
-FINGERPRINTED_SECTIONS = ("strategy", "risk", "costs", "execution_assumptions")
+FINGERPRINTED_SECTIONS = (
+    "strategy",
+    "risk",
+    "costs",
+    "execution_assumptions",
+    "capital_base",
+)
 
 
 def _canonical(value: Any) -> Any:
@@ -430,5 +436,16 @@ def fingerprint_sections(config: RunConfig) -> dict[str, str]:
         "execution_assumptions": _digest(
             {"price_impact_pct": config.backtest.price_impact_pct,
              "execution_slippage_pct": config.backtest.execution_slippage_pct}
+        ),
+        # The denominator of every drawdown percentage the gate checks.
+        # `max_drawdown_pct` is peak-to-trough as a fraction of equity, and
+        # equity starts here — so raising the capital base after approval
+        # divides every observed drawdown by the same factor. A 12% drawdown
+        # becomes 0.12% and clears an 8% threshold with a fingerprint that
+        # still matches. A percentage threshold against an unpinned
+        # denominator is not a gate; see
+        # planning/decisions/2026-09-13-max-drawdown-threshold.md.
+        "capital_base": _digest(
+            {"initial_capital_usd": config.backtest.initial_capital_usd}
         ),
     }
