@@ -11,6 +11,9 @@ fallback that quietly starts spending money is the wrong shape for this.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import urllib.parse
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -182,3 +185,93 @@ def _required_int(payload: dict[str, Any], key: str) -> int:
         return int(raw)
     except (TypeError, ValueError) as exc:
         raise ProviderError(PROVIDER, f"{key!r} was not an integer: {raw!r}") from exc
+
+
+@dataclass(frozen=True)
+class SwapTransaction:
+    """An unsigned swap transaction from Jupiter, plus what it was built on.
+
+    `transaction_base64` is what the chain will see once signed. Everything
+    else is context for auditing: which blockhash it is bound to, and when it
+    expires. Both matter because a transaction whose blockhash has aged out is
+    not "slow", it is invalid, and re-signing a fresh one produces different
+    bytes that must be simulated again.
+    """
+
+    transaction_base64: str
+    last_valid_block_height: int | None
+    raw: dict[str, Any]
+
+    def to_bytes(self) -> bytes:
+        """The serialised transaction. This is what authorisation binds to."""
+        import base64
+
+        return base64.b64decode(self.transaction_base64)
+
+
+class JupiterSwapClient(JupiterQuoteClient):
+    """Builds unsigned swap transactions. Cannot sign and cannot send.
+
+    Separate from `JupiterQuoteClient` so that the read-only path stays
+    read-only: code that only needs prices takes the quote client and has no
+    method that could ever produce something sendable. Stage 6 takes this one.
+
+    A transaction from here is inert. It has no signature, so submitting it
+    would be rejected by the cluster — the capability to sign lives nowhere in
+    this repo yet, and the send path requires a `SendAuthorization` bound to
+    these exact bytes (`live.preflight`).
+    """
+
+    def build_swap(
+        self,
+        *,
+        quote_response: dict[str, Any],
+        user_public_key: str,
+        wrap_and_unwrap_sol: bool = True,
+        compute_unit_limit: int | None = None,
+        priority_fee_microlamports_per_cu: int | None = None,
+    ) -> SwapTransaction:
+        """POST /swap/v1/swap — returns an UNSIGNED transaction.
+
+        `quote_response` must be the raw quote payload Jupiter returned, passed
+        through unmodified. Reconstructing or editing it invites a route that
+        was never priced, and the resulting transaction would not match the
+        quote risk approved.
+        """
+        if not user_public_key:
+            raise ValueError("user_public_key is required to build a swap")
+
+        body: dict[str, Any] = {
+            "quoteResponse": quote_response,
+            "userPublicKey": user_public_key,
+            "wrapAndUnwrapSol": wrap_and_unwrap_sol,
+        }
+        # Fees are set explicitly, never left to a provider default: the cost
+        # model prices these exact numbers, and a transaction that pays a
+        # different fee than the backtest assumed is a different trade.
+        if compute_unit_limit is not None:
+            body["computeUnitLimit"] = compute_unit_limit
+        if priority_fee_microlamports_per_cu is not None:
+            body["computeUnitPriceMicroLamports"] = priority_fee_microlamports_per_cu
+
+        payload = self._http.request(
+            "POST",
+            f"{self._base_url}/swap/v1/swap",
+            headers={"Content-Type": "application/json"},
+            body=json.dumps(body).encode(),
+        ).json()
+
+        encoded = payload.get("swapTransaction")
+        if not isinstance(encoded, str) or not encoded:
+            raise ProviderError(PROVIDER, f"swap response had no swapTransaction: {payload!r}")
+        try:
+            base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ProviderError(PROVIDER, "swapTransaction was not valid base64") from exc
+
+        height = payload.get("lastValidBlockHeight")
+        return SwapTransaction(
+            transaction_base64=encoded,
+            last_valid_block_height=height if isinstance(height, int) else None,
+            raw=payload,
+        )

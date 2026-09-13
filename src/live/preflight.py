@@ -21,32 +21,22 @@ implementation of any of them would eventually disagree with the first.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from core.types import Mode, RejectionCode, RiskDecision, TradeIntent
+from core.types import (
+    Mode,
+    RejectionCode,
+    RiskDecision,
+    SimulationOutcome,
+    TradeIntent,
+    digest_of,
+)
 
 # How stale a simulation may be before it is worthless. Solana blockhashes
 # expire after ~150 slots (~60s); a simulation older than that describes chain
 # state the transaction will never meet.
 MAX_SIMULATION_AGE = timedelta(seconds=30)
-
-
-@dataclass(frozen=True)
-class SimulationOutcome:
-    """The result of simulating one transaction against the live cluster.
-
-    `transaction_digest` identifies the exact bytes simulated. It is the whole
-    point of this type: without it, "a simulation succeeded" is a claim about
-    some transaction, not about the one being sent.
-    """
-
-    transaction_digest: str
-    succeeded: bool
-    simulated_at: datetime
-    error: str | None = None
-    logs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -85,11 +75,6 @@ class PreflightResult:
     @property
     def codes(self) -> tuple[RejectionCode, ...]:
         return tuple(code for code, _ in self.refusals)
-
-
-def digest_of(transaction_bytes: bytes) -> str:
-    """SHA-256 over the serialised transaction. Binds authorisation to bytes."""
-    return hashlib.sha256(transaction_bytes).hexdigest()
 
 
 def authorize_send(
