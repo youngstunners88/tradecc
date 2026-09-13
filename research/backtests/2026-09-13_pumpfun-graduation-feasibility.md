@@ -1,8 +1,11 @@
 # pump.fun graduation-duration hypothesis — feasibility probe
 
 **Date:** 2026-09-13
-**Status:** Feasibility findings only. **No decision record, no strategy code,
-no authorisation to build.** The hypothesis is not yet pre-registered.
+**Status:** Feasibility findings only. **No strategy code, no authorisation to
+build, no data collected.** The hypothesis was pre-registered after this probe,
+on the same date, in
+`planning/decisions/2026-09-13-pumpfun-graduation-duration.md` — that record
+fixes the rules; it does not start collection.
 
 ## Scope flag — this reopens a category that was never in scope
 
@@ -97,12 +100,18 @@ Forward collection, and notably **polling beats the webhook**:
 - A sample becomes testable once the chosen forward horizon has elapsed —
   weeks, not immediately.
 
-**Not started.** It would need a pre-registered decision record first, at the
-same bar as every prior test: walk-forward folds, concentration check,
-buy-and-hold benchmark, `MIN_POOLED_TRADES` floor, and a stopping rule fixed in
-advance. An interesting idea does not get a lighter bar — five hypotheses have
-already failed against that bar, and the bar is why those failures were
-trustworthy.
+**Not started.** It needed a pre-registered decision record first, at the same
+bar as every prior test: walk-forward folds, concentration check, benchmark,
+`MIN_POOLED_TRADES` floor, and a stopping rule fixed in advance. An interesting
+idea does not get a lighter bar — five hypotheses have already failed against
+that bar, and the bar is why those failures were trustworthy.
+
+That record is now written
+(`planning/decisions/2026-09-13-pumpfun-graduation-duration.md`): horizon,
+tertile split, six pass criteria, stopping rule and interpretation rule are all
+fixed against a cohort of **zero observations**. Starting the twice-daily poll
+remains a separate, explicit call — it commits weeks before any verdict can
+exist.
 
 ## What is NOT claimed here
 
