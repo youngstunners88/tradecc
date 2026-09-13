@@ -17,6 +17,18 @@ from typing import Sequence
 
 HUNDRED = Decimal(100)
 
+# The pooled out-of-sample trade floor, fixed in
+# planning/decisions/2026-09-10-walk-forward-validation.md. It lives here, in
+# src/, because both the research harnesses and the live gate must apply the
+# same number and research/ imports from src/ rather than the reverse. It was
+# previously a bare 12 in three places; the sweep's own MIN_TRADES (10) is a
+# different, per-configuration eligibility floor and is deliberately not this.
+#
+# The reason the gate needs it: the sweep produced "+$0.47 on 3 trades", and a
+# gate that accepts positive expectancy without a sample size would unlock live
+# trading on exactly that.
+MIN_POOLED_TRADES = 12
+
 
 @dataclass(frozen=True)
 class ClosedTrade:

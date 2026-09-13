@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from core.config import load_config  # noqa: E402
 from execution.candle_cache import CandleCache  # noqa: E402
+from core.performance import MIN_POOLED_TRADES  # noqa: E402
 from execution.costs import CostModel  # noqa: E402
 
 # Fixed in the decision record.
@@ -34,7 +35,6 @@ TOP_NS = [1, 2]
 REBALANCE_EVERY = 7
 TOTAL_CAPITAL = Decimal("10")
 FOLDS = 3
-MIN_POOLED_TRADES = 12
 UNIVERSE_FILE = Path("research/.universe.json")
 INTERVAL = "1d"
 HUNDRED = Decimal(100)

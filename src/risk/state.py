@@ -7,10 +7,22 @@ trading into a losing day — the exact failure the breaker exists to prevent.
 State is keyed by UTC trading day. Loading state from a previous day yields
 a fresh, un-halted state for today; yesterday's halt does not carry over,
 and today's cannot be erased by a restart.
+
+**Corrupt state fails closed.** An unreadable, truncated, or tampered file
+loads as *halted*, not clean. The earlier behaviour reasoned that corruption
+is not evidence of a loss — true, but it made deleting or truncating the file
+a way to clear a halt, which is the failure this module exists to prevent. The
+integrity check is a plain checksum over the canonical payload: it catches
+truncation, partial writes and casual edits. It is deliberately NOT an HMAC —
+HMAC defends against a forging adversary, which needs a key the bot can read
+and an attacker cannot, and on a single-user box running this bot no such
+boundary exists. Recovery is an explicit `clear-halt` command, not a file
+deletion.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass, replace
@@ -52,7 +64,8 @@ class DailyRiskState:
             return self
         return replace(self, halted=True, halt_reason=reason)
 
-    def to_dict(self) -> dict[str, object]:
+    def canonical_payload(self) -> dict[str, object]:
+        """The fields the checksum covers. Must not include the checksum."""
         return {
             "trading_day": self.trading_day.isoformat(),
             "realized_pnl_usd": str(self.realized_pnl_usd),
@@ -60,6 +73,10 @@ class DailyRiskState:
             "halted": self.halted,
             "halt_reason": self.halt_reason,
         }
+
+    def to_dict(self) -> dict[str, object]:
+        payload = self.canonical_payload()
+        return {**payload, "checksum": _checksum(payload)}
 
     @staticmethod
     def from_dict(raw: dict[str, object]) -> DailyRiskState:
@@ -83,6 +100,21 @@ def _finite_or_raise(value: object) -> Decimal:
     if parsed is None:
         raise ValueError(f"realized_pnl_usd is not a finite decimal: {value!r}")
     return parsed
+
+
+def _checksum(payload: dict[str, object]) -> str:
+    """SHA-256 over the canonical payload, sorted and separator-stable."""
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def halted_on_corruption(today: date, detail: str) -> DailyRiskState:
+    """Fail closed. Cleared only by the explicit `clear-halt` command."""
+    return DailyRiskState(
+        trading_day=today,
+        halted=True,
+        halt_reason=f"risk state {detail} — halted until explicitly cleared",
+    )
 
 
 class RiskStateStorage(Protocol):
@@ -130,13 +162,17 @@ class RiskStateStore:
         if not self._path.is_file():
             return DailyRiskState(trading_day=today)
         try:
-            stored = DailyRiskState.from_dict(json.loads(self._path.read_text()))
-        except (json.JSONDecodeError, OSError, KeyError, ValueError, TypeError):
-            # Corrupt state is not a reason to trade unrestricted, but it is
-            # also not evidence of a loss. Start the day clean and let the
-            # breaker re-accumulate from real fills.
-            return DailyRiskState(trading_day=today)
+            raw = json.loads(self._path.read_text())
+            recorded = raw.pop("checksum", None)
+            stored = DailyRiskState.from_dict(raw)
+        except (json.JSONDecodeError, OSError, KeyError, ValueError, TypeError) as exc:
+            return halted_on_corruption(today, f"unreadable ({type(exc).__name__})")
+        if recorded is None:
+            return halted_on_corruption(today, "has no checksum")
+        if recorded != _checksum(stored.canonical_payload()):
+            return halted_on_corruption(today, "failed its checksum")
         if stored.trading_day != today:
+            # A new day is not corruption: yesterday's state is simply spent.
             return DailyRiskState(trading_day=today)
         return stored
 

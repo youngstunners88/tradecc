@@ -41,7 +41,7 @@ class RiskEngine:
         return self._breaker
 
     def live_gate(self) -> GateResult:
-        return evaluate_live_gate(self._config.gate_file)
+        return evaluate_live_gate(self._config.gate_file, self._config)
 
     def approve(self, intent: TradeIntent, now: datetime | None = None) -> RiskDecision:
         """Run every risk check against a proposed trade.

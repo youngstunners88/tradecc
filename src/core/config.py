@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import os
 from decimal import Decimal, InvalidOperation
+from enum import Enum
 from pathlib import Path
+import hashlib
+import json as _json
 from typing import Any
 
 import yaml
@@ -374,3 +377,58 @@ def _mode_from_env(env: dict[str, str]) -> Mode | None:
     except ValueError as exc:
         valid = ", ".join(m.value for m in Mode)
         raise ValueError(f"BOT_MODE={value!r} is not a valid mode (expected: {valid})") from exc
+
+
+# What a live-gate approval is bound to. A gate file approved against one
+# strategy or one set of risk limits must not silently unlock a different one.
+#
+# Excluded on purpose: state_dir, gate_file, data.cache_dir and
+# paper.poll_seconds. Paths and polling cadence do not change what was
+# validated, and including them would break the gate on a machine move or a
+# harmless cadence tweak — a gate that cries wolf gets worked around.
+FINGERPRINTED_SECTIONS = ("strategy", "risk", "costs", "execution_assumptions")
+
+
+def _canonical(value: Any) -> Any:
+    """Stable, type-explicit form. Decimal as str so 0.5 and 0.50 differ."""
+    if isinstance(value, Decimal):
+        return f"Decimal:{value}"
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, BaseModel):
+        return {k: _canonical(v) for k, v in sorted(value.model_dump().items())}
+    if isinstance(value, dict):
+        return {str(k): _canonical(v) for k, v in sorted(value.items(), key=lambda kv: str(kv[0]))}
+    if isinstance(value, (list, tuple)):
+        return [_canonical(v) for v in value]
+    if isinstance(value, Enum):
+        return value.value
+    return value
+
+
+def _digest(value: Any) -> str:
+    blob = _json.dumps(_canonical(value), sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def fingerprint_sections(config: RunConfig) -> dict[str, str]:
+    """Per-section digests of everything an approval is bound to.
+
+    Per-section rather than one opaque hash so the gate can say *which* part
+    changed. "fingerprint mismatch" on a 138-file repo is not a debuggable
+    failure message.
+    """
+    return {
+        "strategy": _digest(
+            {"name": config.strategy.name, "params": config.strategy.params,
+             "token_mints": list(config.strategy.token_mints)}
+        ),
+        "risk": _digest(config.risk),
+        "costs": _digest(config.costs),
+        # The adverse-price assumptions the expectancy figure was computed
+        # under. A validated expectancy means nothing under different ones.
+        "execution_assumptions": _digest(
+            {"price_impact_pct": config.backtest.price_impact_pct,
+             "execution_slippage_pct": config.backtest.execution_slippage_pct}
+        ),
+    }

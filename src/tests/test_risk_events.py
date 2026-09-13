@@ -12,7 +12,7 @@ from core.telemetry import configure_telemetry
 from core.types import Mode
 from risk.engine import RiskEngine
 from tests.conftest import make_intent, make_quote
-from tests.test_gate import VALID_GATE
+from tests.test_gate import VALID_GATE, gate_payload
 
 
 class FakeSink:
@@ -87,8 +87,8 @@ def test_unlocked_live_trade_emits_no_gate_refusal(run_config, store, sink, now)
     # Live-configured, because a LIVE intent on a PAPER-configured engine is
     # now refused outright — see test_paper_configured_engine_refuses_a_live
     # _intent in test_risk_engine.py.
-    run_config.gate_file.write_text(json.dumps(VALID_GATE))
     live = run_config.model_copy(update={"mode": Mode.LIVE})
+    run_config.gate_file.write_text(json.dumps(gate_payload(live)))
 
     RiskEngine(live, store).approve(make_intent(mode=Mode.LIVE), now)
 

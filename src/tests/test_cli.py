@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 import cli
-from tests.test_gate import VALID_GATE
+from tests.test_gate import VALID_GATE, gate_payload
 
 TOKEN = "So11111111111111111111111111111111111111112"
 POOL = "8sLbNZoA1cfnvMJLPfp98ZLAnFSYCFApfJKMbiXNLwxj"
@@ -34,6 +34,13 @@ def write_config(tmp_path: Path, mode: str, **overrides) -> Path:
     path = tmp_path / f"config.{mode}.yaml"
     path.write_text(yaml.safe_dump(data))
     return path
+
+
+def gate_for(config_path):
+    """A satisfied gate bound to the config the CLI will load from disk."""
+    from core.config import load_config
+
+    return gate_payload(load_config(config_path, env={}))
 
 
 def test_parser_exposes_all_four_commands():
@@ -70,7 +77,7 @@ def test_live_refusal_explains_where_to_look(tmp_path, capsys):
 def test_live_refuses_on_a_partially_satisfied_gate(tmp_path, capsys):
     config = write_config(tmp_path, "live")
     (tmp_path / "gate.json").write_text(
-        json.dumps({**VALID_GATE, "net_expectancy_usd": -1})
+        json.dumps({**gate_for(config), "net_expectancy_usd": -1})
     )
 
     exit_code = cli.main(["live", "--config", str(config)])
@@ -82,7 +89,7 @@ def test_live_refuses_on_a_partially_satisfied_gate(tmp_path, capsys):
 def test_live_still_sends_nothing_even_when_the_gate_passes(tmp_path, capsys):
     """Stage 6 is not built; saying so beats a stub that looks like it traded."""
     config = write_config(tmp_path, "live")
-    (tmp_path / "gate.json").write_text(json.dumps(VALID_GATE))
+    (tmp_path / "gate.json").write_text(json.dumps(gate_for(config)))
 
     exit_code = cli.main(["live", "--config", str(config)])
 
@@ -103,7 +110,7 @@ def test_gate_command_reports_each_failure(tmp_path, capsys):
 
 def test_gate_command_succeeds_when_unlocked(tmp_path, capsys):
     config = write_config(tmp_path, "paper")
-    (tmp_path / "gate.json").write_text(json.dumps(VALID_GATE))
+    (tmp_path / "gate.json").write_text(json.dumps(gate_for(config)))
 
     exit_code = cli.main(["gate", "--config", str(config)])
 
@@ -279,3 +286,65 @@ def test_shipped_configs_drive_the_cli(tmp_path):
         config = load_config(root / name, env={})
         assert config.strategy.token_mints
         assert config.paper.pool_address
+
+
+# --- clear-halt: the deliberate, logged recovery path.
+
+
+def test_clear_halt_refuses_without_acknowledge(tmp_path, capsys):
+    """Recovery must be deliberate. Without this command the workaround is
+    deleting the state file, which is the hole fail-closed loading shut."""
+    from decimal import Decimal
+
+    from risk.circuit_breaker import DailyCircuitBreaker
+    from risk.state import RiskStateStore
+
+    config = write_config(tmp_path, "paper")
+    store = RiskStateStore(tmp_path / "state")
+    DailyCircuitBreaker(Decimal("20"), store).record_realized_pnl(Decimal("-50"))
+
+    exit_code = cli.main(["clear-halt", "--config", str(config)])
+
+    assert exit_code == cli.EXIT_ERROR
+    assert "--acknowledge" in capsys.readouterr().err
+    assert store.load().halted, "refusing must not clear the halt"
+
+
+def test_clear_halt_clears_only_with_acknowledge(tmp_path, capsys):
+    from decimal import Decimal
+
+    from risk.circuit_breaker import DailyCircuitBreaker
+    from risk.state import RiskStateStore
+
+    config = write_config(tmp_path, "paper")
+    store = RiskStateStore(tmp_path / "state")
+    DailyCircuitBreaker(Decimal("20"), store).record_realized_pnl(Decimal("-50"))
+
+    exit_code = cli.main(["clear-halt", "--config", str(config), "--acknowledge"])
+
+    assert exit_code == cli.EXIT_OK
+    assert not store.load().halted
+    assert "halt cleared" in capsys.readouterr().out
+
+
+def test_clear_halt_recovers_a_corrupt_state_file(tmp_path, capsys):
+    """The realistic case: the file is unreadable, so loading halts. The
+    operator must be able to get back to trading without rm."""
+    config = write_config(tmp_path, "paper")
+    from risk.state import RiskStateStore
+
+    store = RiskStateStore(tmp_path / "state")
+    store.path.parent.mkdir(parents=True, exist_ok=True)
+    store.path.write_text("{ truncated")
+
+    assert store.load().halted
+
+    assert cli.main(["clear-halt", "--config", str(config), "--acknowledge"]) == cli.EXIT_OK
+    assert not store.load().halted
+
+
+def test_clear_halt_is_a_noop_when_not_halted(tmp_path, capsys):
+    config = write_config(tmp_path, "paper")
+
+    assert cli.main(["clear-halt", "--config", str(config)]) == cli.EXIT_OK
+    assert "nothing to clear" in capsys.readouterr().out

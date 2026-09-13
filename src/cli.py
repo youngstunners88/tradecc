@@ -27,6 +27,7 @@ from execution.geckoterminal import GeckoTerminalClient
 from execution.jupiter import JupiterQuoteClient
 from paper.session import PaperSessionStore
 from paper.trader import PaperTrader
+from risk.state import DailyRiskState, RiskStateStore
 from strategy.registry import build_strategy
 
 logger = get_logger("tradecc.cli")
@@ -147,7 +148,7 @@ def cmd_paper(args: argparse.Namespace) -> int:
 def cmd_live(args: argparse.Namespace) -> int:
     """Live mode refuses unless the validation gate is fully satisfied."""
     config = _bootstrap(args.config, Mode.LIVE)
-    gate = evaluate_live_gate(config.gate_file)
+    gate = evaluate_live_gate(config.gate_file, config)
 
     log_and_track(
         "mode.changed",
@@ -177,11 +178,46 @@ def cmd_live(args: argparse.Namespace) -> int:
 
 def cmd_gate(args: argparse.Namespace) -> int:
     config = _bootstrap(args.config, None)
-    gate = evaluate_live_gate(config.gate_file)
+    gate = evaluate_live_gate(config.gate_file, config)
     print(gate.describe())
     for failure in gate.failures:
         print(f"  - {failure}")
     return EXIT_OK if gate.unlocked else EXIT_GATE_LOCKED
+
+
+def cmd_clear_halt(args: argparse.Namespace) -> int:
+    """Deliberately clear a halted risk state.
+
+    This exists so that recovering from a corrupt or tripped breaker is an
+    explicit, logged action. Without it the workaround is "delete the state
+    file", which is precisely the hole fail-closed loading was added to shut.
+    """
+    config = _bootstrap(args.config, None)
+    store = RiskStateStore(config.state_dir)
+    state = store.load()
+
+    if not state.halted:
+        print(f"not halted for {state.trading_day.isoformat()} — nothing to clear")
+        return EXIT_OK
+
+    if not args.acknowledge:
+        print(
+            f"trading is halted for {state.trading_day.isoformat()}: {state.halt_reason}\n"
+            "Re-run with --acknowledge to clear it. Read why it halted first: a "
+            "breaker that tripped on real losses is not the same as a corrupt file.",
+            file=sys.stderr,
+        )
+        return EXIT_ERROR
+
+    store.save(DailyRiskState(trading_day=state.trading_day))
+    log_and_track(
+        "risk.halt_cleared",
+        trading_day=state.trading_day.isoformat(),
+        previous_reason=state.halt_reason,
+        operator_ack=True,
+    )
+    print(f"halt cleared for {state.trading_day.isoformat()} (was: {state.halt_reason})")
+    return EXIT_OK
 
 
 def _format_summary(result) -> str:
@@ -232,6 +268,17 @@ def build_parser() -> argparse.ArgumentParser:
     gate = subparsers.add_parser("gate", help="report live-gate status and why it is locked")
     gate.add_argument("--config", default="config.paper.yaml")
     gate.set_defaults(func=cmd_gate)
+
+    clear = subparsers.add_parser(
+        "clear-halt", help="deliberately clear a halted risk state (requires --acknowledge)"
+    )
+    clear.add_argument("--config", default="config.paper.yaml")
+    clear.add_argument(
+        "--acknowledge",
+        action="store_true",
+        help="confirm you have read why trading halted before clearing it",
+    )
+    clear.set_defaults(func=cmd_clear_halt)
 
     return parser
 

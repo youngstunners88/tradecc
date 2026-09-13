@@ -96,15 +96,60 @@ def test_rejects_non_positive_limit(store):
         DailyCircuitBreaker(Decimal("0"), store)
 
 
-def test_corrupt_state_file_does_not_unlock_trading(store, now):
+def test_corrupt_state_file_halts_trading(store, now):
+    """Fail closed. This previously returned a CLEAN day, which made
+    truncating or deleting the file a way to clear a halt — the exact failure
+    persistence exists to prevent."""
     store.path.parent.mkdir(parents=True, exist_ok=True)
     store.path.write_text("{ not json")
 
     breaker = DailyCircuitBreaker(Decimal("20"), store)
 
-    # Corrupt state yields a clean day rather than a crash or a phantom halt.
-    assert breaker.check(now).approved
-    assert breaker.state(now).realized_pnl_usd == Decimal("0")
+    assert not breaker.check(now).approved
+    assert "unreadable" in (breaker.state(now).halt_reason or "")
+
+
+def test_a_halt_cannot_be_cleared_by_editing_halted_to_false(store, now):
+    """Valid JSON, tampered field. The checksum no longer matches, so the
+    edit reads as corruption and trading stays halted."""
+    import json as _json
+
+    breaker = DailyCircuitBreaker(Decimal("20"), store)
+    breaker.record_realized_pnl(Decimal("-25"), now)
+    assert not breaker.check(now).approved
+
+    raw = _json.loads(store.path.read_text())
+    assert raw["halted"] is True
+    raw["halted"] = False
+    raw["halt_reason"] = None
+    store.path.write_text(_json.dumps(raw))  # checksum left stale
+
+    assert not breaker.check(now).approved
+    assert "checksum" in (breaker.state(now).halt_reason or "")
+
+
+def test_a_file_with_no_checksum_halts(store, now):
+    """State written by something other than this store is not trusted."""
+    import json as _json
+    from datetime import timezone
+
+    store.path.parent.mkdir(parents=True, exist_ok=True)
+    store.path.write_text(
+        _json.dumps(
+            {
+                "trading_day": now.astimezone(timezone.utc).date().isoformat(),
+                "realized_pnl_usd": "0",
+                "trade_count": 0,
+                "halted": False,
+                "halt_reason": None,
+            }
+        )
+    )
+
+    breaker = DailyCircuitBreaker(Decimal("20"), store)
+
+    assert not breaker.check(now).approved
+    assert "no checksum" in (breaker.state(now).halt_reason or "")
 
 
 def test_non_finite_persisted_pnl_cannot_disable_the_breaker(tmp_path):
@@ -156,5 +201,5 @@ def test_nan_persisted_pnl_does_not_crash_the_breach_check(tmp_path):
         )
     )
     breaker = DailyCircuitBreaker(Decimal("5"), RiskStateStore(tmp_path))
-    assert breaker.check().approved
-    assert breaker.state().realized_pnl_usd == Decimal("0")
+    # Now also fails closed: a NaN P&L is unreadable state, not a clean day.
+    assert not breaker.check().approved

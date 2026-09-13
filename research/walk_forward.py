@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from backtest.runner import BacktestResult, BacktestRunner  # noqa: E402
 from core.config import load_config  # noqa: E402
 from core.performance import (  # noqa: E402
+    MIN_POOLED_TRADES,
     ClosedTrade,
     expectancy,
     gross_pnl,
@@ -88,7 +89,7 @@ class Verdict:
     majority_positive: bool  # net > 0 in >= 2 of 3 folds
     pooled_positive: bool  # pooled net > 0
     not_concentrated: bool  # no fold > 60% of pooled net
-    enough_trades: bool  # pooled trade count >= 12
+    enough_trades: bool  # pooled trade count >= MIN_POOLED_TRADES
 
     @property
     def replicated(self) -> bool:
@@ -164,7 +165,7 @@ def judge(folds: list[FoldResult]) -> Verdict:
         majority_positive=positive_folds >= 2,
         pooled_positive=pooled > 0,
         not_concentrated=not_concentrated,
-        enough_trades=pooled_trades >= 12,
+        enough_trades=pooled_trades >= MIN_POOLED_TRADES,
     )
 
 
@@ -211,7 +212,7 @@ def run_phase_a(config_path: str) -> int:
         print(f"    net>0 in >=2/3 folds ......... {_mark(verdict.majority_positive)}")
         print(f"    pooled net > 0 .............. {_mark(verdict.pooled_positive)}")
         print(f"    no fold > 60% of pooled ..... {_mark(verdict.not_concentrated)}")
-        print(f"    pooled trades >= 12 ......... {_mark(verdict.enough_trades)}"
+        print(f"    pooled trades >= {MIN_POOLED_TRADES} ......... {_mark(verdict.enough_trades)}"
               f"  ({pooled_trades})")
         print(f"    => REPLICATED: {verdict.replicated}")
         print()
@@ -348,7 +349,7 @@ def run_phase_b(config_path: str) -> int:
         print(f"    net>0 in >=2/3 folds ......... {_mark(verdict.majority_positive)}")
         print(f"    pooled net > 0 .............. {_mark(verdict.pooled_positive)}")
         print(f"    no fold > 60% of pooled ..... {_mark(verdict.not_concentrated)}")
-        print(f"    pooled trades >= 12 ......... {_mark(verdict.enough_trades)}"
+        print(f"    pooled trades >= {MIN_POOLED_TRADES} ......... {_mark(verdict.enough_trades)}"
               f"  ({pooled_trades})")
         print(f"    => REPLICATED: {verdict.replicated}")
         print()

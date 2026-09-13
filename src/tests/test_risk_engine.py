@@ -10,7 +10,7 @@ import pytest
 from core.types import Mode, RejectionCode
 from risk.engine import RiskEngine
 from tests.conftest import make_intent, make_quote
-from tests.test_gate import VALID_GATE
+from tests.test_gate import VALID_GATE, gate_payload
 
 
 @pytest.fixture
@@ -95,8 +95,9 @@ def test_live_mode_refused_when_gate_unsatisfied(run_config, store, now):
 
 
 def test_live_mode_allowed_only_once_gate_is_fully_satisfied(run_config, store, now):
-    run_config.gate_file.write_text(json.dumps(VALID_GATE))
-    engine = RiskEngine(live_config(run_config), store)
+    live = live_config(run_config)
+    run_config.gate_file.write_text(json.dumps(gate_payload(live)))
+    engine = RiskEngine(live, store)
 
     assert engine.approve(make_intent(mode=Mode.LIVE), now).approved
 
@@ -117,8 +118,9 @@ def test_paper_configured_engine_refuses_a_live_intent(run_config, store, now):
 def test_live_configured_engine_refuses_an_intent_claiming_paper(run_config, store, now):
     """The dangerous direction: once signing exists, a live-configured
     process must not execute an intent that claims to be paper."""
-    run_config.gate_file.write_text(json.dumps(VALID_GATE))
-    engine = RiskEngine(live_config(run_config), store)
+    live = live_config(run_config)
+    run_config.gate_file.write_text(json.dumps(gate_payload(live)))
+    engine = RiskEngine(live, store)
 
     decision = engine.approve(make_intent(mode=Mode.PAPER), now)
 

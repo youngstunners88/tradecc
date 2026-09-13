@@ -23,6 +23,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from core.config import RunConfig, fingerprint_sections
+from core.performance import MIN_POOLED_TRADES
 from core.types import finite_decimal
 
 MINIMUM_PAPER_TRADING_DAYS = 30
@@ -39,8 +41,16 @@ class GateResult:
         return "live gate: LOCKED — " + "; ".join(self.failures)
 
 
-def evaluate_live_gate(gate_file: Path | str, now: datetime | None = None) -> GateResult:
-    """Evaluate the live-trading gate. Returns locked on any doubt."""
+def evaluate_live_gate(
+    gate_file: Path | str, config: RunConfig, now: datetime | None = None
+) -> GateResult:
+    """Evaluate the live-trading gate. Returns locked on any doubt.
+
+    `config` is required, not optional. The gate binds an approval to the exact
+    strategy and limits it was granted against, and it cannot verify that
+    binding without knowing what is actually about to run. An optional
+    parameter would make the strongest check the easiest one to skip.
+    """
     path = Path(gate_file)
     if not path.is_file():
         return GateResult(False, (f"no gate file at {path} — live mode has never been unlocked",))
@@ -57,6 +67,8 @@ def evaluate_live_gate(gate_file: Path | str, now: datetime | None = None) -> Ga
     failures.extend(_check_paper_duration(raw))
     failures.extend(_check_drawdown(raw))
     failures.extend(_check_expectancy(raw))
+    failures.extend(_check_trade_count(raw))
+    failures.extend(_check_fingerprint(raw, config))
     failures.extend(_check_human_approval(raw))
     return GateResult(not failures, tuple(failures))
 
@@ -108,6 +120,57 @@ def _check_expectancy(raw: dict[str, Any]) -> list[str]:
     if expectancy <= 0:
         return [f"net expectancy {expectancy} USD is not positive after fees and slippage"]
     return []
+
+
+def _check_trade_count(raw: dict[str, Any]) -> list[str]:
+    """Positive expectancy on too few trades is not evidence.
+
+    The sweep produced "+$0.47 on 3 trades". Without this check a gate file
+    reporting exactly that would unlock live trading.
+    """
+    value = raw.get("trade_count")
+    if isinstance(value, bool) or not isinstance(value, int):
+        return ["trade_count missing or not an integer"]
+    if value < MIN_POOLED_TRADES:
+        return [
+            f"paper run produced {value} trades, needs at least {MIN_POOLED_TRADES} "
+            "— positive expectancy on fewer is not distinguishable from luck"
+        ]
+    return []
+
+
+def _check_fingerprint(raw: dict[str, Any], config: RunConfig) -> list[str]:
+    """Bind the approval to the strategy and limits it was granted against.
+
+    Without this, a gate file approved for one strategy unlocks live trading
+    for any strategy — including one that was never tested.
+    """
+    recorded = raw.get("validated_fingerprint")
+    if not isinstance(recorded, dict) or not recorded:
+        return [
+            "validated_fingerprint missing — cannot prove this approval was "
+            "granted against the strategy and limits now configured"
+        ]
+    current = fingerprint_sections(config)
+    changed = sorted(
+        section
+        for section in current
+        if recorded.get(section) != current[section]
+    )
+    unknown = sorted(set(recorded) - set(current))
+    failures: list[str] = []
+    if changed:
+        failures.append(
+            "configuration changed since approval — "
+            + ", ".join(f"{section!r} differs" for section in changed)
+            + ": re-validate and re-approve, or restore the approved values"
+        )
+    if unknown:
+        failures.append(
+            f"validated_fingerprint has unrecognised sections {unknown} — "
+            "it was written by a different version of this gate"
+        )
+    return failures
 
 
 def _check_human_approval(raw: dict[str, Any]) -> list[str]:
