@@ -1,8 +1,10 @@
 # Decision: Copy-trading wallet universe — the rule, and why it cannot be satisfied yet
 
 **Date:** 2026-09-13
-**Status:** **Blocked before selection.** No wallet has been scored, ranked, or
-named, and none will be until this record is resolved.
+**Status:** **BLOCKED — infeasible data infrastructure.** Resolved 2026-09-13.
+This carries the same standing as momentum's exhausted verdict: it is a
+conclusion, not a pause. No wallet was scored, ranked, or named, and none will
+be without a new decision record reopening this one on fresh evidence.
 
 ## Why this record exists first
 
@@ -90,28 +92,34 @@ the cost hurdle (0.35% per round trip at $10) are all fine. **Only discovery is
 blocked.** Given a candidate set from somewhere trustworthy, everything
 downstream works.
 
-## The options, stated without a recommendation dressed as a fact
+## The options, and the ruling
 
-1. **A wallet-level indexed data source** (Helius parsed transactions, Birdeye)
-   turns discovery from a traversal into a query. It is **registry-gated**: the
-   standing instruction was to hold off unless copy-trading review specifically
-   blocked on it. It now does, which is the trigger — but it needs its own
-   decision record, costs money, and its own point-in-time properties must be
-   audited before trusting them, since a vendor's "top traders" endpoint is the
-   biased list in a different wrapper.
-2. **Accept a biased universe and say so permanently.** A result from a
-   leaderboard-derived set can only ever read "not refuted on a
-   survivorship-selected sample" — which is weak enough that it should not be
-   allowed to justify capital.
-3. **Stop here.** Record that no tradeable edge is reachable under current
-   constraints, which is the day-21 trigger the gauntlet already named.
+Three were put forward. The ruling, 2026-09-13:
+
+1. **A vendor "top traders" list** (Helius, Birdeye, or any indexed source that
+   ranks wallets by realised performance) — **REJECTED.** It reintroduces the
+   exact survivorship bias the point-in-time rule exists to prevent, via a
+   vendor instead of a public leaderboard. Paying for the biased list does not
+   unbias it. This is not a cost question and it is not reopened by a budget.
+2. **Accept a biased universe and label the result** — **REJECTED.** A number
+   that can only ever read "not refuted on a survivorship-selected sample" is
+   not worth the effort to produce and must never justify capital.
+3. **Record it as blocked and stop searching for a workaround** — **ADOPTED.**
+
+Note what is *not* ruled out: a wallet-level indexed source used for
+**enumeration** rather than ranking — one that answers "which wallets traded
+this pool before date T", with no performance ordering — would satisfy the
+rule. No such access is available now, and searching for one is explicitly out
+of scope until something changes. That distinction is recorded so a future
+reader does not mistake this for a blanket ban on indexed data.
 
 ## What this record forecloses
 
-- Scoring, ranking, or naming any wallet before the universe question is
-  resolved. **No wallet has been touched.**
+- Scoring, ranking, or naming any wallet. **No wallet has been touched.**
 - Deriving a candidate set from any list that was itself produced by ranking on
-  realised performance, whatever it is called.
+  realised performance, whatever it is called and whoever sells it.
+- Further effort searching for a workaround. The question is settled until new
+  evidence — not a new idea — reopens it in a fresh record.
 - Quietly relaxing the ≥ $250k reserve floor to find an enumerable pool — that
   trades a measurement problem for a liquidity problem and hides it.
 
