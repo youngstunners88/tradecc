@@ -1,0 +1,41 @@
+# Live mode — real transactions. LOCKED until the validation gate in
+# planning/specs/mvp_spec.md is met; see ops/live-gate.json.
+#
+# Setting mode: live here is NOT sufficient to trade. RiskEngine re-checks
+# the gate on every intent and vetoes if it is not satisfied.
+mode: live
+
+risk:
+  # Stays at the $5–$10 default even after the gate opens (CLAUDE.md rule 6).
+  position_size_usd: 10
+  max_slippage_pct: 0.5
+  daily_loss_limit_usd: 20
+  per_trade_stop_loss_pct: 5
+  per_trade_take_profit_pct: 10
+
+strategy:
+  name: momentum
+  params:
+    fast_ema: 12
+    slow_ema: 26
+    rsi_period: 14
+    rsi_overbought: 70
+    rsi_oversold: 30
+  token_mints:
+    - "So11111111111111111111111111111111111111112"
+
+paper:
+  # SOL/USDC on Solana — the pool candles are polled from.
+  pool_address: "8sLbNZoA1cfnvMJLPfp98ZLAnFSYCFApfJKMbiXNLwxj"
+  quote_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+  quote_mint_decimals: 6
+  poll_seconds: 300
+
+data:
+  source: geckoterminal
+  cache_dir: research/.candle-cache
+  max_requests_per_minute: 30
+  candle_interval: 15m
+
+state_dir: ops/.state
+gate_file: ops/live-gate.json

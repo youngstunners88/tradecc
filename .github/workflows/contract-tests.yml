@@ -1,0 +1,48 @@
+name: contract-tests
+
+# Network contract tests against real provider APIs (Jupiter, Helius,
+# GeckoTerminal). This is a DRIFT DETECTOR, not a merge gate: it must
+# never block a PR, because a third party's outage is not a reason to
+# stop merging our own code.
+#
+# When this goes red, the question is "did the provider's API change?",
+# which is real and worth knowing about within a day — not within a
+# pull request.
+
+on:
+  schedule:
+    # 06:15 UTC daily. Off the hour on purpose: scheduled jobs at :00 queue
+    # behind everyone else's cron on shared runners.
+    - cron: "15 6 * * *"
+  workflow_dispatch:
+
+# A slow provider must not leave overlapping runs piling up.
+concurrency:
+  group: contract-tests
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run network contract tests
+        env:
+          # Absent secrets are fine: tests that need a key skip themselves
+          # rather than failing, so the free-tier endpoints still get checked.
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+        # No coverage gate here — these tests exist to detect provider
+        # drift, and coverage is enforced by the unit suite in test.yml.
+        run: pytest -m network -v

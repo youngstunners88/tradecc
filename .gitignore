@@ -14,3 +14,10 @@ research/.candle-cache/
 .coverage
 .pytest_cache/
 *.egg-info/
+
+# Sweep intermediates — regenerate with research/sweep.py, not source
+research/.sweep-winners.json
+research/.universe.json
+
+# DexPaprika probe cache — regenerate with research/dexpaprika_probe.py
+research/.dexpaprika-probe/

@@ -1,5 +1,16 @@
 # MVP Spec — v0.1: Solana Momentum Bot (Paper-Trading First)
 
+> **Status update, 2026-09-12 — the v0.1 momentum strategy is CLOSED with no
+> demonstrated edge.** Six independent protocol-bound tests converged negative
+> and buy-and-hold beat it on every interval. See
+> `planning/decisions/2026-09-12-kill-ema-rsi-momentum.md`.
+>
+> The *infrastructure* below (backtest and paper modes, risk engine, cost
+> model, validation gate) stands and is reusable. The *strategy* it was built
+> to validate does not. The validation gate stays in force for whatever
+> strategy comes next, and remains incomplete until a decision record sets the
+> max-drawdown threshold it requires.
+
 ## Overview
 Build a Solana trading bot that trades a single momentum/TA strategy at
 small position sizes, defaults to **paper trading** (simulated fills
@@ -28,8 +39,10 @@ switched to live trading once it clears an explicit validation gate.
 1. **RPC connectivity** — connect to Solana mainnet via Helius; fail
    loudly (not silently) if the RPC is unreachable or rate-limited.
 2. **Price/OHLC data ingestion** — pull historical and near-real-time
-   price data for a configurable token list (data source TBD — see open
-   questions).
+   price data for a configurable token list from GeckoTerminal, behind a
+   data-source interface so it can be swapped without touching strategy
+   or risk code. Candles cache to disk so backtests are reproducible and
+   runnable offline. Respect the ~30 req/min limit in code.
 3. **Strategy signal generation** — a momentum module (EMA/RSI or
    similar) producing buy/sell/hold signals from the price data, with
    parameters exposed via config, not hardcoded.
@@ -92,11 +105,20 @@ switched to live trading once it clears an explicit validation gate.
   and defaults to refusing to run.
 - A README explains how to run each mode and what config each requires.
 
-## Open questions (resolve before/while building — ask the user)
-- Python or TypeScript? (Default assumption: Python — see
-  `planning/decisions/2026-09-09-strategy-and-stack.md`.)
-- OHLC/price data source for backtesting.
-- Hosting target for `ops/deploy` (local vs. VPS).
-- Helius tier ceiling (stay free vs. pay for Developer tier).
-- Exact TA parameters (which EMA/RSI periods, which tokens to watch)
-  and the max-drawdown threshold for the validation gate.
+## Resolved questions
+See `planning/decisions/2026-09-09-v01-open-questions-resolved.md` for
+the reasoning behind each.
+- **Language:** Python (confirmed, not just assumed).
+- **OHLC/price data source:** GeckoTerminal, cached to disk. Birdeye is
+  the fallback if rate limits or data gaps prove limiting.
+- **Hosting:** local for development/backtesting; a small VPS for the
+  30-day paper run.
+- **Helius tier:** free tier for v0.1.
+
+## Open questions (still unresolved)
+- Exact TA parameters (which EMA/RSI periods, which tokens to watch).
+  These are config values validated by backtest, so they do not block
+  scaffolding — but they must be settled before the paper run.
+- **Max-drawdown threshold for the validation gate.** Must be recorded
+  in a decision record *before* the 30-day paper clock starts. Until it
+  is, the validation gate is incomplete and `live` mode stays locked.
