@@ -8,6 +8,7 @@ quietly wrong.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -206,3 +207,30 @@ def finite_decimal(value: object) -> Decimal | None:
     except (InvalidOperation, ValueError):
         return None
     return parsed if parsed.is_finite() else None
+
+
+@dataclass(frozen=True)
+class SimulationOutcome:
+    """The result of simulating one transaction against the live cluster.
+
+    `transaction_digest` identifies the exact bytes simulated. It is the whole
+    point of this type: without it, "a simulation succeeded" is a claim about
+    some transaction, not about the one being sent.
+    """
+
+    transaction_digest: str
+    succeeded: bool
+    simulated_at: datetime
+    error: str | None = None
+    logs: tuple[str, ...] = ()
+
+
+def digest_of(transaction_bytes: bytes) -> str:
+    """SHA-256 over a serialised transaction.
+
+    Lives here because both the execution layer (which simulates) and the live
+    layer (which authorises) must agree on what identifies a transaction. Two
+    implementations of "which transaction is this" would eventually disagree,
+    and the disagreement would authorise a send of bytes nobody simulated.
+    """
+    return hashlib.sha256(transaction_bytes).hexdigest()
