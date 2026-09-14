@@ -45,8 +45,26 @@ decisions that contradict it.
 |---|---|---|---|
 | Define or change scope/strategy | `/planning` | CONTEXT.md, `specs/mvp_spec.md` | — |
 | Write or modify bot code | `/src` | CONTEXT.md | testing-skill |
+| Propose ANY strategy idea | — | — | **structural-edge-inventory first, then edge-viability-check** |
 | Backtest or validate a strategy | `/research` | CONTEXT.md | backtesting-skill |
 | Deploy, monitor, or handle an incident | `/ops` | CONTEXT.md | — |
+
+## Strategy search is closed pending a decision
+
+Every edge category examined for this project is closed, each for a documented
+reason — see `.claude/skills/structural-edge-inventory` and
+`planning/architecture/2026-09-14-structural-edge-inventory.md`. Directional
+prediction is closed as a *class*, not as a tally of failures: the required
+direction accuracy (73.8%-94.8%) is roughly twenty points outside what is
+achievable on liquid crypto.
+
+**Do not propose, research or build toward a strategy without reading the
+inventory first.** If an idea is not in the ledger, it must name which of the
+four causes it escapes (latency race, adverse selection, data infrastructure,
+detection floor) and how — then pass `.claude/skills/edge-viability-check`
+before any backtest is written.
+
+The binding constraints are position size and data access, not the code.
 
 ## Non-negotiable rules (apply everywhere, no exceptions)
 1. **Never hardcode or commit a private key, seed phrase, or `.env` file.**
