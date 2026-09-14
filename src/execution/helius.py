@@ -168,3 +168,46 @@ class HeliusRpcClient:
             error=None if error is None else str(error),
             logs=tuple(str(line) for line in logs if isinstance(line, str)),
         )
+
+
+class HeliusTransactionSubmitter(HeliusRpcClient):
+    """The one class in this project that can put bytes on chain.
+
+    Separate from `HeliusRpcClient` for the same reason `JupiterSwapClient` is
+    separate from `JupiterQuoteClient`: code that only reads prices or
+    simulates must have no method capable of transmitting, and the surface
+    tests on the parent pin that. Inheritance keeps the RPC plumbing shared
+    while leaving the read-only class genuinely read-only.
+
+    It performs NO policy. It does not know about authorisations, gates or
+    risk — `live.sender.TransactionSender` owns all of that and is the only
+    intended caller. Putting a check here as well would create a second place
+    where "may we send?" is answered, and two answers eventually disagree.
+    """
+
+    def send_transaction(self, transaction_base64: str) -> str:
+        """Submit a signed transaction. Returns its signature.
+
+        `skipPreflight` is false: the cluster runs its own preflight as a last
+        line of defence. `maxRetries` is 0 because a retry would re-broadcast
+        bytes whose blockhash may have expired, and the caller — which holds
+        the single-use authorisation — is the only thing that may decide to
+        try again.
+        """
+        result = self._rpc(
+            "sendTransaction",
+            [
+                transaction_base64,
+                {
+                    "encoding": "base64",
+                    "skipPreflight": False,
+                    "preflightCommitment": "confirmed",
+                    "maxRetries": 0,
+                },
+            ],
+        )
+        if not isinstance(result, str) or not result:
+            raise ProviderError(
+                PROVIDER, "sendTransaction: result was not a transaction signature"
+            )
+        return result

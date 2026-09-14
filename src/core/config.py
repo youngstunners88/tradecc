@@ -54,6 +54,15 @@ class RiskConfig(StrictModel):
     # that has gone obviously wrong.
     max_fee_fraction_of_size: Decimal = Decimal("0.25")
 
+    # CLAUDE.md rule 2 — a dedicated hot wallet, never the user's main wallet,
+    # funded only with capital they can afford to lose. Nothing could enforce
+    # that until sending existed; now it can, approximately but usefully: a
+    # wallet holding a lot of SOL is probably not the throwaway. The sender
+    # refuses to transmit from a wallet above this balance. Expressed in SOL
+    # rather than USD so the check needs no price feed — the one input that
+    # has already gone wrong here once.
+    max_hot_wallet_sol: Decimal = Decimal("1.0")
+
     # Must be set to true to run a position size above the $10 soft ceiling.
     # Its only purpose is to make scaling up a deliberate, visible act.
     position_size_override_ack: bool = False
@@ -65,6 +74,7 @@ class RiskConfig(StrictModel):
         "per_trade_stop_loss_pct",
         "per_trade_take_profit_pct",
         "max_fee_fraction_of_size",
+        "max_hot_wallet_sol",
         mode="before",
     )
     @classmethod
@@ -92,6 +102,7 @@ class RiskConfig(StrictModel):
         "per_trade_stop_loss_pct",
         "per_trade_take_profit_pct",
         "max_fee_fraction_of_size",
+        "max_hot_wallet_sol",
     )
     @classmethod
     def _must_be_positive(cls, value: Decimal) -> Decimal:
