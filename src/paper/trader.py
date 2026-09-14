@@ -273,13 +273,29 @@ class PaperTrader:
 
         if side is Side.BUY:
             input_mint, output_mint = paper.quote_mint, token_mint
+            input_decimals, output_decimals = (
+                paper.quote_mint_decimals,
+                paper.token_mint_decimals,
+            )
             amount_atomic = int(size_usd * (Decimal(10) ** paper.quote_mint_decimals))
         else:
             input_mint, output_mint = token_mint, paper.quote_mint
+            input_decimals, output_decimals = (
+                paper.token_mint_decimals,
+                paper.quote_mint_decimals,
+            )
             if entry_price is None or entry_price <= 0:
                 raise ValueError("a SELL quote needs the entry price to size the token amount")
             quantity = size_usd / entry_price
             amount_atomic = int(quantity * (Decimal(10) ** paper.token_mint_decimals))
+
+        if amount_atomic <= 0:
+            # A position small enough to round to zero atomic units cannot be
+            # priced, and asking anyway returns a quote for a different trade.
+            raise ValueError(
+                f"{side.value} size {size_usd} rounds to zero atomic units at "
+                f"{input_decimals} decimals — too small to quote"
+            )
 
         return self._quotes.get_quote(
             input_mint=input_mint,
@@ -287,6 +303,8 @@ class PaperTrader:
             amount_atomic=amount_atomic,
             slippage_bps=slippage_bps,
             amount_usd=size_usd,
+            input_decimals=input_decimals,
+            output_decimals=output_decimals,
             side=side,
         )
 

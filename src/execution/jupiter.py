@@ -49,6 +49,21 @@ class JupiterQuote:
 
 
 class JupiterQuoteClient:
+    """Jupiter quotes, normalised to one price convention.
+
+    **Every Quote this client returns prices the traded token in the quote
+    asset — "how much USDC is one SOL worth" — on both sides**, scaled out of
+    atomic units so the number is directly comparable to a candle close.
+    `worst_case_price` is always the adverse direction for that side: higher
+    than expected for a BUY, lower for a SELL.
+
+    That convention is load-bearing rather than cosmetic. `entry_price` comes
+    from a BUY quote and `exit_price` from a SELL quote, and P&L is
+    `(exit - entry) / entry`; the same numbers are compared against candle
+    closes to fire stop-loss and take-profit. Two legs in different units
+    produce arithmetic that is not wrong by a little.
+    """
+
     def __init__(
         self,
         providers: ProvidersConfig,
@@ -76,10 +91,14 @@ class JupiterQuoteClient:
         amount_atomic: int,
         slippage_bps: int,
         amount_usd: Decimal,
+        input_decimals: int,
+        output_decimals: int,
+        *,
         side: Side = Side.BUY,
     ) -> Quote:
         return self.get_quote_detailed(
-            input_mint, output_mint, amount_atomic, slippage_bps, amount_usd, side
+            input_mint, output_mint, amount_atomic, slippage_bps, amount_usd,
+            input_decimals, output_decimals, side=side,
         ).quote
 
     def get_quote_detailed(
@@ -89,12 +108,20 @@ class JupiterQuoteClient:
         amount_atomic: int,
         slippage_bps: int,
         amount_usd: Decimal,
+        input_decimals: int,
+        output_decimals: int,
+        *,
         side: Side = Side.BUY,
     ) -> JupiterQuote:
         if amount_atomic <= 0:
             raise ValueError("amount_atomic must be positive")
         if slippage_bps < 0:
             raise ValueError("slippage_bps must not be negative")
+        # Required, not defaulted. Decimals are what turn an atomic ratio into
+        # a price comparable to a candle close, and a default here would be a
+        # silent wrong answer on every pair that does not happen to match it.
+        if input_decimals < 0 or output_decimals < 0:
+            raise ValueError("token decimals must not be negative")
 
         query = urllib.parse.urlencode(
             {
@@ -106,10 +133,20 @@ class JupiterQuoteClient:
         )
         url = f"{self._base_url}/swap/v1/quote?{query}"
         payload = self._http.request("GET", url).json()
-        return self._to_quote(payload, output_mint, amount_usd, side)
+        return self._to_quote(
+            payload, input_mint, output_mint, amount_usd, side,
+            input_decimals, output_decimals,
+        )
 
     def _to_quote(
-        self, payload: Any, output_mint: str, amount_usd: Decimal, side: Side
+        self,
+        payload: Any,
+        input_mint: str,
+        output_mint: str,
+        amount_usd: Decimal,
+        side: Side,
+        input_decimals: int,
+        output_decimals: int,
     ) -> JupiterQuote:
         if not isinstance(payload, dict):
             raise ProviderError(PROVIDER, "quote response was not a JSON object")
@@ -120,17 +157,44 @@ class JupiterQuoteClient:
         # the number the risk engine's slippage cap actually reads.
         threshold = _required_int(payload, "otherAmountThreshold")
 
+        if in_amount <= 0:
+            raise ProviderError(PROVIDER, "quote returned a non-positive input amount")
         if out_amount <= 0 or threshold <= 0:
             raise ProviderError(PROVIDER, "quote returned a non-positive output amount")
 
-        # Prices are input-per-output ratios in atomic units. Token decimals
-        # cancel in the ratio, so slippage_pct is exact without a decimals
-        # lookup; USD-denominated pricing arrives with the data layer.
-        expected_price = Decimal(in_amount) / Decimal(out_amount)
-        worst_case_price = Decimal(in_amount) / Decimal(threshold)
+        # THE PRICE INVARIANT (see the class docstring): every Quote prices
+        # **quote asset per token**, on both sides, scaled out of atomic units
+        # so it is directly comparable to a candle close. `worst_case_price` is
+        # always the adverse direction for that side — higher for a BUY, lower
+        # for a SELL.
+        #
+        # This used to be `in/out` unconditionally, which is quote-per-token
+        # only on a BUY. A SELL sends the token, so `in/out` was token per
+        # quote asset — the reciprocal. Recording that as `exit_price` against
+        # a BUY-derived `entry_price` reported **+$990 on a $10 position in a
+        # flat market**, and the same prices were compared against candle
+        # closes to fire stop-loss and take-profit. No test caught it because
+        # the mock quote source returned one orientation for both sides.
+        token_decimals = output_decimals if side is Side.BUY else input_decimals
+        quote_decimals = input_decimals if side is Side.BUY else output_decimals
+        scale = Decimal(10) ** (token_decimals - quote_decimals)
+
+        if side is Side.BUY:
+            expected_atomic = Decimal(in_amount) / Decimal(out_amount)
+            worst_atomic = Decimal(in_amount) / Decimal(threshold)
+        else:
+            expected_atomic = Decimal(out_amount) / Decimal(in_amount)
+            worst_atomic = Decimal(threshold) / Decimal(in_amount)
+
+        expected_price = expected_atomic * scale
+        worst_case_price = worst_atomic * scale
+
+        # The token being traded, not whatever happens to be on the output
+        # leg: on a SELL the output is the quote asset.
+        token_mint = output_mint if side is Side.BUY else input_mint
 
         quote = Quote(
-            token_mint=output_mint,
+            token_mint=token_mint,
             side=side,
             amount_usd=amount_usd,
             expected_price=expected_price,

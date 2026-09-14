@@ -43,6 +43,12 @@ class ClosedTrade:
 
     @property
     def gross_pnl_usd(self) -> Decimal:
+        # Matches the guard on Position.unrealized_pnl_usd. Without it a zero
+        # entry price raised a bare decimal.DivisionByZero out of the P&L path,
+        # which says nothing about what went wrong or where the bad price came
+        # from.
+        if self.entry_price <= 0:
+            raise ValueError("ClosedTrade.entry_price must be positive")
         return self.size_usd * (self.exit_price - self.entry_price) / self.entry_price
 
     @property
@@ -107,15 +113,33 @@ def win_rate_pct(trades: Sequence[ClosedTrade]) -> Decimal:
 
 
 def max_drawdown_pct(equity_curve: Sequence[Decimal]) -> Decimal:
-    """Largest peak-to-trough decline, in percent of the running peak."""
+    """Largest peak-to-trough decline, in percent of the running peak.
+
+    A non-positive running peak raises rather than returning 0. The previous
+    `if peak > 0` guard skipped those points silently, so a curve of
+    `[0, -5]` — equity falling from nothing to a deficit — reported a drawdown
+    of **0%**, and `[-10, -20]` did too. That number feeds the gate's drawdown
+    check, where a silent 0 clears any threshold. It is the same shape as the
+    persisted-`Infinity` bug: a safety comparison satisfied by a value that
+    means "no answer".
+
+    This is unreachable on the normal path — equity starts at
+    `initial_capital_usd`, which is validated positive, and a running peak only
+    ever rises — so raising costs nothing and closes the hole for research
+    harnesses that build curves by hand.
+    """
     if not equity_curve:
         return Decimal(0)
     peak = equity_curve[0]
     worst = Decimal(0)
     for equity in equity_curve:
         peak = max(peak, equity)
-        if peak > 0:
-            worst = max(worst, (peak - equity) / peak * HUNDRED)
+        if peak <= 0:
+            raise ValueError(
+                f"equity curve peak is {peak}, so a drawdown percentage of it is "
+                "undefined; equity must start from positive capital"
+            )
+        worst = max(worst, (peak - equity) / peak * HUNDRED)
     return worst
 
 

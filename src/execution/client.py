@@ -20,7 +20,18 @@ from core.types import Quote, Side
 
 @runtime_checkable
 class QuoteSource(Protocol):
-    """Anything that can price a prospective swap."""
+    """Anything that can price a prospective swap.
+
+    Implementations must honour one price convention: `expected_price` and
+    `worst_case_price` are **quote asset per token on both sides**, in human
+    units rather than atomic ones, with `worst_case_price` adverse for the
+    side (higher on a BUY, lower on a SELL). A source that returns the
+    reciprocal on SELLs silently inverts every exit price.
+
+    `input_decimals` and `output_decimals` have no defaults on purpose: they
+    are what convert an atomic ratio into that price, and a default would be
+    a silent wrong answer on every pair that did not match it.
+    """
 
     def get_quote(
         self,
@@ -29,5 +40,8 @@ class QuoteSource(Protocol):
         amount_atomic: int,
         slippage_bps: int,
         amount_usd: Decimal,
+        input_decimals: int,
+        output_decimals: int,
+        *,
         side: Side = Side.BUY,
     ) -> Quote: ...
