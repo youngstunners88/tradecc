@@ -19,6 +19,14 @@ import pytest
 from execution.http import HttpResponse, ProviderError
 
 ROOT = Path(__file__).resolve().parents[2]
+# The placeholder key below is shaped so it does NOT match the repository's own
+# CI secret scan (`.github/workflows/test.yml`), whose pattern requires a long
+# unbroken alphanumeric run after the vendor prefix. The hyphens break that run,
+# so this is unmistakably a placeholder to a reader and invisible to the
+# scanner. A first version used a realistic-looking suffix and failed CI on
+# exactly that pattern — correctly. If you edit this, keep hyphens inside the
+# suffix; do not relax the scan.
+FAKE_KEY = "sk-or-v1-" + "NOT-A-REAL-KEY"
 
 
 def _load(name: str):
@@ -58,7 +66,7 @@ def call(transport, **overrides):
         model=deepseek.MODEL_ALIAS,
         max_tokens=4000,
         seed=17,
-        api_key="sk-or-v1-testkey0123456789",
+        api_key=FAKE_KEY,
         transport=transport,
     )
     kwargs.update(overrides)
@@ -85,7 +93,7 @@ def test_posts_a_bounded_request_to_the_chat_endpoint() -> None:
 
 def test_the_key_travels_in_a_header_and_never_in_the_url_or_prompt() -> None:
     transport = RecordingTransport()
-    key = "sk-or-v1-testkey0123456789"
+    key = FAKE_KEY
     call(transport, api_key=key)
 
     (request,) = transport.requests
@@ -214,7 +222,7 @@ def test_a_missing_key_is_a_clear_refusal_not_a_traceback(capsys, monkeypatch) -
 def test_a_failed_call_degrades_to_no_draft(capsys, monkeypatch) -> None:
     """Best-effort infrastructure: a failure prints and exits, it does not
     propagate a traceback into whatever invoked it."""
-    monkeypatch.setenv(deepseek.API_KEY_ENV, "sk-or-v1-testkey0123456789")
+    monkeypatch.setenv(deepseek.API_KEY_ENV, FAKE_KEY)
 
     def fail(**_kwargs):
         raise RuntimeError("provider is down")

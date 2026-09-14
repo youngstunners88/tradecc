@@ -26,6 +26,14 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+# The placeholder key below is shaped so it does NOT match the repository's own
+# CI secret scan (`.github/workflows/test.yml`), whose pattern requires a long
+# unbroken alphanumeric run after the vendor prefix. The hyphens break that run,
+# so this is unmistakably a placeholder to a reader and invisible to the
+# scanner. A first version used a realistic-looking suffix and failed CI on
+# exactly that pattern — correctly. If you edit this, keep hyphens inside the
+# suffix; do not relax the scan.
+FAKE_KEY = "sk-or-v1-" + "NOT-A-REAL-KEY"
 
 
 def _load(name: str):
@@ -151,7 +159,7 @@ def test_mnemonic_is_refused(repo: Path) -> None:
 def test_live_secret_value_is_refused_wherever_it_appears(repo: Path) -> None:
     """The deny-list runs on top of the allow-list: a key pasted into an
     otherwise sendable research note is still caught on the way out."""
-    env = {"OPENROUTER_API_KEY": "sk-or-v1-abcdef0123456789"}
+    env = {"OPENROUTER_API_KEY": FAKE_KEY}
     with pytest.raises(ForbiddenPayload, match="live value of a registered secret"):
         send(repo, write(repo, "research/n.md", f"we used {env['OPENROUTER_API_KEY']}\n"), env=env)
 
@@ -240,7 +248,7 @@ def test_the_question_text_is_scanned_too(repo: Path) -> None:
 
 
 def test_refusal_never_echoes_the_secret(repo: Path) -> None:
-    secret = "sk-or-v1-abcdef0123456789"
+    secret = FAKE_KEY
     with pytest.raises(ForbiddenPayload) as excinfo:
         send(repo, text=f"my key is {secret}", env={"OPENROUTER_API_KEY": secret})
     assert secret not in str(excinfo.value)
