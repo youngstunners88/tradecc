@@ -1,7 +1,12 @@
 # Decision: stop looking for an edge in directional price prediction
 
 **Date:** 2026-09-14
-**Status:** Adopted as a search filter. Changes no code, no risk default, no
+**Status:** **SUPERSEDED** by
+`2026-09-14-close-directional-prediction-class.md`, which replaces this
+record's rule with the reason behind it and closes the class outright. Kept
+because the derivation below is what that closure rests on.
+
+Originally adopted as a search filter. Changes no code, no risk default, no
 gate condition. Closes a *class* of hypothesis, not a specific one.
 **Evidence:** `research/backtests/2026-09-14_edge-budget.md`
 

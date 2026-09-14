@@ -88,6 +88,15 @@ curl -sS https://openrouter.ai/api/v1/models \
 
 See `references/models.md` for the verified snapshot and how to refresh it.
 
+**For heavy-context research work — structural-edge analysis, edge-viability
+arithmetic, decision-record drafting — use
+`.claude/skills/openrouter-deepseek` instead.** It routes to
+`deepseek/deepseek-v4-pro`, which is ~6x cheaper on input and ~16x cheaper on
+output than Astra with no long-prompt price cliff, and it carries a stricter
+isolation boundary than this skill: no gate state, no fingerprint data, no
+wallet information, and a mandatory provenance note on anything it helps
+write. The five hard boundaries above apply there unchanged.
+
 ### Variants worth knowing
 - `openai/gpt-6-astra` — the default.
 - `openai/gpt-6-astra-pro` — the same underlying model served with

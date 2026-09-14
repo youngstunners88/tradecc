@@ -9,12 +9,22 @@ about the strategy, and the P&L column exists only because omitting it would
 look like concealment — momentum remains closed per
 `planning/decisions/2026-09-12-kill-ema-rsi-momentum.md`.
 
-| Interval | Ticks | Entered | Exited | Net $ | Branches never reached |
-|---|---|---|---|---|---|
-| 15m | 940 | 22 | 22 | −1.1097 | `entry_blocked` |
-| 1h | 940 | 16 | 15 | +0.5426 | `entry_blocked` |
-| 4h | 940 | 20 | 19 | +0.9307 | `entry_blocked` |
-| 1d | 124 | 2 | 2 | +0.9899 | `entry_blocked` |
+| Interval | Ticks | Entered | Exited | Net $ (corrected) | Net $ (as first published) | Branches never reached |
+|---|---|---|---|---|---|---|
+| 15m | 940 | 22 | 22 | **−1.9855** | −1.1097 | `entry_blocked` |
+| 1h | 940 | 16 | 15 | **−0.0596** | +0.5426 | `entry_blocked` |
+| 4h | 940 | 20 | 19 | **+0.1671** | +0.9307 | `entry_blocked` |
+| 1d | 124 | 2 | 2 | **+0.9054** | +0.9899 | `entry_blocked` |
+
+> **Correction, 2026-09-14.** The right-hand column was measured before the
+> SELL-slippage fix landed on `main`. `MockQuoteSource` applied BUY-direction
+> slippage to both sides, so every simulated exit filled *better* than it
+> should have and all four figures were optimistic. Every corrected number
+> moved in the pessimistic direction, and 1h crossed from positive to negative
+> — which is exactly the magnitude of error the fix was for.
+>
+> **The coverage findings below are unaffected.** They depend on which branches
+> execute, not on what the fills were worth.
 
 ## The findings that matter
 
