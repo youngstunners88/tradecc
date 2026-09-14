@@ -11,13 +11,16 @@ real one is never handed to a log call in the first place.
 
 from __future__ import annotations
 
+import base64
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
 from core.config import ProvidersConfig
 from core.logging import get_logger, register_secret
 from core.rate_limit import RateLimiter
+from core.types import SimulationOutcome, digest_of
 from execution.http import (
     HttpTransport,
     ProviderError,
@@ -114,3 +117,54 @@ class HeliusRpcClient:
             raise ProviderError(
                 PROVIDER, "getLatestBlockhash: response had no blockhash"
             ) from exc
+
+    def simulate_transaction(
+        self, transaction_base64: str, *, now: datetime | None = None
+    ) -> SimulationOutcome:
+        """Simulate a transaction against the cluster. Sends nothing.
+
+        `simulateTransaction` executes against current chain state and returns
+        what *would* happen. It is the enforcement point for CLAUDE.md rule 3,
+        and the outcome it returns is digest-bound to these exact bytes so that
+        `live.preflight` can refuse a send of anything else.
+
+        `sigVerify` is deliberately false: the transaction is unsigned at this
+        stage, and signature verification is not what we are asking about. We
+        are asking whether the swap would succeed against current state.
+
+        A simulation the cluster refuses to run, or answers malformed, raises —
+        an unanswered question is not a passing answer, and preflight's own
+        default is refusal anyway.
+        """
+        moment = now or datetime.now(timezone.utc)
+        result = self._rpc(
+            "simulateTransaction",
+            [
+                transaction_base64,
+                {
+                    "encoding": "base64",
+                    "sigVerify": False,
+                    "replaceRecentBlockhash": True,
+                    "commitment": "confirmed",
+                },
+            ],
+        )
+        if not isinstance(result, dict):
+            raise ProviderError(PROVIDER, "simulateTransaction: result was not an object")
+        value = result.get("value")
+        if not isinstance(value, dict):
+            raise ProviderError(PROVIDER, "simulateTransaction: result had no value object")
+
+        error = value.get("err")
+        logs = value.get("logs") or []
+        return SimulationOutcome(
+            transaction_digest=digest_of(base64.b64decode(transaction_base64)),
+            # err is null on success and an object/string describing the fault
+            # otherwise. Anything that is not null is a failure, including
+            # shapes we do not recognise — an unrecognised error is still an
+            # error, and guessing otherwise would send a failing transaction.
+            succeeded=error is None,
+            simulated_at=moment,
+            error=None if error is None else str(error),
+            logs=tuple(str(line) for line in logs if isinstance(line, str)),
+        )
