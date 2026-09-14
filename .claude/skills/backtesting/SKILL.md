@@ -5,6 +5,13 @@ description: Walk-forward backtesting protocol for TradeCC. Use when running, re
 
 # Backtesting Protocol
 
+> **Not the same tool as `trade-simulation`.** A backtest asks "would this have
+> made money"; `research/replay_sim.py` asks "does the machinery that places
+> the trades work, and which branches has real data never reached". Its trade
+> count is a coverage measure and is never evidence of edge. Edge questions
+> stay here.
+
+
 Every backtest follows this. Violations make the result unusable as
 evidence for the live-trading gate. The protocol is not open to in-flight
 revision — changing it is a decision record and a STOP.

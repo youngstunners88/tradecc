@@ -5,6 +5,11 @@ description: Audit any change touching src/risk, src/execution, mode selection, 
 
 # Risk Audit Checklist
 
+> Before auditing, read `failure-modes` — the five defect shapes that have
+> actually shipped in this repo, each with a detection recipe. Every one of
+> them passed review and a green suite, so re-reading the diff for style has a
+> worse hit rate than walking the shapes against it.
+
 Run after ANY edit to `src/risk/`, `src/execution/`, mode selection, the
 cost model, or key handling.
 
