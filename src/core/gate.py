@@ -29,11 +29,50 @@ from core.types import finite_decimal
 
 MINIMUM_PAPER_TRADING_DAYS = 30
 
+# Stable prefixes for the fingerprint *mismatch* failures.
+# `GateResult.fingerprint_mismatch` reads these rather than matching on prose,
+# so rewording a message cannot silently stop an alert from firing. Any new
+# mismatch failure must be added here as well as raised.
+#
+# "validated_fingerprint missing" is deliberately NOT in this list. A mismatch
+# says "the approval on file was granted against a different bot"; absence says
+# "there is no approval", which is the ordinary state of a gate nobody has
+# approved yet. Treating absence as a mismatch made every fresh install raise an
+# urgent FINGERPRINT MISMATCH alert whose body claimed an approval existed —
+# and a gate that cries wolf gets worked around, which is the failure mode this
+# repo already accepted as the reason for excluding paths from the fingerprint.
+#
+# Deleting a fingerprint from a gate file that previously had one is still
+# caught: `gate_watch` sees the failure set change, and an approval that was
+# unlocked and stops being so raises `relocked`, which is urgent on its own.
+FINGERPRINT_MISMATCH_PREFIXES = (
+    "configuration changed since approval",
+    "validated_fingerprint has unrecognised sections",
+)
+
 
 @dataclass(frozen=True)
 class GateResult:
     unlocked: bool
     failures: tuple[str, ...]
+
+    @property
+    def fingerprint_mismatch(self) -> bool:
+        """True when the approval no longer binds to the running configuration.
+
+        Separated from the other failures because it means something different:
+        the other checks say "the evidence is not there yet", this one says
+        "the evidence is for a different bot". It is the one gate failure that
+        can appear *after* an approval that previously passed.
+
+        A *missing* fingerprint is not a mismatch — see the note on
+        FINGERPRINT_MISMATCH_PREFIXES.
+        """
+        return any(
+            failure.startswith(prefix)
+            for failure in self.failures
+            for prefix in FINGERPRINT_MISMATCH_PREFIXES
+        )
 
     def describe(self) -> str:
         if self.unlocked:

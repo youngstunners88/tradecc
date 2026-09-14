@@ -33,7 +33,7 @@ reasoning) · PARKED (not relevant now, no verdict needed)
 
 | Tool | Link | Status |
 |---|---|---|
-| AgentMail | agentmail.to | Skill built (`agent-mail-alerts`), not wired — no execution paths exist yet to alert on. Wire when Stage 6 (real execution) lands. |
+| AgentMail | agentmail.to | **Wired 2026-09-13** to live-gate state changes (`src/notify/agentmail.py` + `src/core/gate_watch.py`): unlock, re-lock, fingerprint mismatch, and changes to the failure set, observed from `gate`, `live` and every paper tick. No new dependency — built on the project's own `ProviderHttpClient`. Inert without `AGENTMAIL_API_KEY`/`AGENTMAIL_FROM`/`AGENTMAIL_TO`. The remaining rows in `alert-rules.md` (circuit breaker, slippage batching, RPC failures, daily heartbeat) are still unwired. |
 
 ## GATED — v0.2, needs explicit greenlight per component (not a blanket unlock)
 

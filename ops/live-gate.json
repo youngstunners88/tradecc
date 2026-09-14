@@ -1,0 +1,13 @@
+{
+  "_what_this_file_is": "The REAL live-trading gate, read by src/core/gate.py. It is committed deliberately as an audit record. Live mode unlocks only when EVERY field below is present and satisfied; missing fields leave it locked, which is the state it is in right now.",
+
+  "_status": "LOCKED. Only the drawdown threshold has been set. Five of the six gate checks are unsatisfied because the evidence they require does not exist yet: no paper run has started, no strategy has demonstrated an edge, and no human approval has been given.",
+
+  "_threshold_provenance": "8% approved by the user on 2026-09-14, on the derivation in planning/decisions/2026-09-13-max-drawdown-threshold.md. The rule was fixed before the number: 1.5x the drawdown implied by the expected longest losing streak at the upper end of plausible trade counts (5.09% at 400 trades and a 40% win rate) -> 7.6% -> 8%. In dollars at the $100 capital base, 8% = $8.",
+  "_threshold_is_now_immutable": "threshold_set_at is what makes this a gate rather than a rationalisation. core/gate.py fails the gate when threshold_set_at is later than paper_started_at, so this timestamp must predate the first paper tick. Moving it later to accommodate a run that overshot would defeat the only thing this field is for.",
+
+  "threshold_set_at": "2026-09-14T00:41:03+00:00",
+  "max_drawdown_threshold_pct": 8,
+
+  "_remaining_fields": "Everything below is absent on purpose and must be filled with REAL measured results before live mode can unlock. See .claude/skills/tradecc-paper-validation/references/gate-checklist.md for how to produce each value, and ops/live-gate.example.json for the full shape including validated_fingerprint (five sections: strategy, risk, costs, execution_assumptions, capital_base)."
+}

@@ -12,7 +12,7 @@ Use before any request to unlock live mode.
 ## Gate Criteria (enforced in `src/core/gate.py`)
 - [ ] ≥ 30 days of paper mode against real market data
 - [ ] Positive expectancy **after** realistic fees + slippage + Jupiter tiers
-- [ ] Max drawdown ≤ pre-agreed threshold (threshold written in a decision record before the period started)
+- [ ] Max drawdown ≤ **8%** — locked 2026-09-14 in `planning/decisions/2026-09-13-max-drawdown-threshold.md` and written into `ops/live-gate.json` as `threshold_set_at: 2026-09-14T00:41:03+00:00`. That timestamp must predate `paper_started_at`; do not move it.
 - [ ] **`trade_count` ≥ 12** closed round trips
 - [ ] **`validated_fingerprint` matches the running config**
 - [ ] Paper logs are complete enough to reconstruct every trading day
@@ -54,10 +54,18 @@ Paste the result verbatim into the gate file.
 | `risk` | every field — position size, slippage cap, stop loss, take profit, daily loss limit |
 | `costs` | every field — fees, priority fee per CU, Jito tip, ATA rent |
 | `execution_assumptions` | `backtest.price_impact_pct` and `backtest.execution_slippage_pct` |
+| `capital_base` | `backtest.initial_capital_usd` |
 
 `execution_assumptions` is separated out because a validated expectancy figure
 means nothing under different adverse-price assumptions than the ones it was
 computed under.
+
+`capital_base` is the denominator of every drawdown percentage the gate checks:
+`max_drawdown_pct` is peak-to-trough as a fraction of equity, and equity starts
+at `initial_capital_usd`. Raising it after an approval divides every observed
+drawdown by the same factor — a 12% drawdown reads as 0.12% and clears an 8%
+threshold. A percentage threshold against an unpinned denominator is not a
+gate. See `planning/decisions/2026-09-13-max-drawdown-threshold.md`.
 
 **Deliberately excluded** — `state_dir`, `gate_file`, `data.cache_dir`,
 `paper.poll_seconds`. These are file locations and polling cadence. They do not
@@ -65,6 +73,11 @@ change *what was validated*, so moving the bot to another machine or adjusting
 the poll interval must not invalidate an approval. A gate that fails for
 reasons unrelated to the evidence gets worked around, and a worked-around gate
 protects nothing.
+
+Every gate state change — unlock, re-lock, and a fingerprint mismatch
+appearing — is emailed by `core.gate_watch` when AgentMail is configured
+(`AGENTMAIL_API_KEY`, `AGENTMAIL_FROM`, `AGENTMAIL_TO`). A steady gate sends
+nothing. Unconfigured, the transition is still written to the structured log.
 
 **If the binding fails**, the message names the section that moved, e.g.
 `configuration changed since approval — 'risk' differs`. Two honest responses:

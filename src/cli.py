@@ -17,14 +17,17 @@ from pathlib import Path
 
 from backtest.report import write_report
 from backtest.runner import BacktestRunner
+from core.alerts import configure_alerts
 from core.config import RunConfig, load_config
 from core.gate import evaluate_live_gate
+from core.gate_watch import GateWatcher
 from core.logging import configure_logging, get_logger, register_secret
 from core.telemetry import configure_telemetry, log_and_track
 from core.types import Mode
 from execution.candle_cache import CandleCache
 from execution.geckoterminal import GeckoTerminalClient
 from execution.jupiter import JupiterQuoteClient
+from notify.agentmail import build_sink_from_env
 from paper.session import PaperSessionStore
 from paper.trader import PaperTrader
 from risk.state import DailyRiskState, RiskStateStore
@@ -37,7 +40,12 @@ EXIT_ERROR = 1
 EXIT_GATE_LOCKED = 2
 
 
-SECRET_ENV_NAMES = ("HELIUS_API_KEY", "POSTHOG_API_KEY", "OPENROUTER_API_KEY")
+SECRET_ENV_NAMES = (
+    "HELIUS_API_KEY",
+    "POSTHOG_API_KEY",
+    "OPENROUTER_API_KEY",
+    "AGENTMAIL_API_KEY",
+)
 
 
 def _bootstrap(config_path: str, mode: Mode | None) -> RunConfig:
@@ -51,6 +59,9 @@ def _bootstrap(config_path: str, mode: Mode | None) -> RunConfig:
         register_secret(os.environ.get(name))
     configure_logging()
     configure_telemetry()
+    # Alerts are built here, above both layers: `core` defines the sink
+    # protocol and `notify` implements it, so neither has to import the other.
+    configure_alerts(build_sink_from_env(dict(os.environ)))
     return load_config(config_path, mode=mode)
 
 
@@ -128,10 +139,17 @@ def cmd_paper(args: argparse.Namespace) -> int:
         f"day {state.elapsed_days():.1f} of 30 · {state.trade_count} trades"
     )
 
+    # The paper run is the only long-lived process this project has, so it is
+    # where a gate state change is most likely to go unnoticed: config edited
+    # mid-run, a gate file dropped in, an approval that stops binding. Checking
+    # once per tick costs one small file read and turns all three into an email.
+    watcher = GateWatcher(config.state_dir)
+
     # None means run indefinitely; --once is shorthand for a single tick.
     max_ticks = args.ticks if args.ticks else (1 if args.once else None)
     completed = 0
     while max_ticks is None or completed < max_ticks:
+        watcher.observe(evaluate_live_gate(config.gate_file, config))
         result = trader.run_tick_and_save(state)
         print(f"[{result.at.isoformat()}] {result.action} {result.detail}".rstrip())
         if result.error:
@@ -149,6 +167,7 @@ def cmd_live(args: argparse.Namespace) -> int:
     """Live mode refuses unless the validation gate is fully satisfied."""
     config = _bootstrap(args.config, Mode.LIVE)
     gate = evaluate_live_gate(config.gate_file, config)
+    GateWatcher(config.state_dir).observe(gate)
 
     log_and_track(
         "mode.changed",
@@ -179,6 +198,10 @@ def cmd_live(args: argparse.Namespace) -> int:
 def cmd_gate(args: argparse.Namespace) -> int:
     config = _bootstrap(args.config, None)
     gate = evaluate_live_gate(config.gate_file, config)
+    # Checking the gate is itself an observation: if the state changed since
+    # the last look, that is worth an alert whether a human ran this command
+    # or a cron did.
+    GateWatcher(config.state_dir).observe(gate)
     print(gate.describe())
     for failure in gate.failures:
         print(f"  - {failure}")

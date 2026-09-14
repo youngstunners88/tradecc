@@ -8,8 +8,9 @@
 > The *infrastructure* below (backtest and paper modes, risk engine, cost
 > model, validation gate) stands and is reusable. The *strategy* it was built
 > to validate does not. The validation gate stays in force for whatever
-> strategy comes next, and remains incomplete until a decision record sets the
-> max-drawdown threshold it requires.
+> strategy comes next. Its last missing *decision*, the max-drawdown threshold,
+> was set at **8% on 2026-09-14**; what it still lacks is evidence, not a
+> number.
 
 ## Overview
 Build a Solana trading bot that trades a single momentum/TA strategy at
@@ -122,3 +123,11 @@ the reasoning behind each.
 - **Max-drawdown threshold for the validation gate.** Must be recorded
   in a decision record *before* the 30-day paper clock starts. Until it
   is, the validation gate is incomplete and `live` mode stays locked.
+  **RESOLVED 2026-09-14 at 8%** —
+  `planning/decisions/2026-09-13-max-drawdown-threshold.md`, written into
+  `ops/live-gate.json` with `threshold_set_at: 2026-09-14T00:41:03+00:00`,
+  which must predate the first paper tick. That record also fixed the
+  denominator: `backtest.initial_capital_usd` is now a fingerprinted section,
+  because a percentage threshold against an unpinned capital base is not a
+  gate. The validation gate is no longer *incomplete*; it is simply
+  **unsatisfied**, which is a different and ordinary state.
