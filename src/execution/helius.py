@@ -11,13 +11,16 @@ real one is never handed to a log call in the first place.
 
 from __future__ import annotations
 
+import base64
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
 from core.config import ProvidersConfig
 from core.logging import get_logger, register_secret
 from core.rate_limit import RateLimiter
+from core.types import SimulationOutcome, digest_of
 from execution.http import (
     HttpTransport,
     ProviderError,
@@ -114,3 +117,97 @@ class HeliusRpcClient:
             raise ProviderError(
                 PROVIDER, "getLatestBlockhash: response had no blockhash"
             ) from exc
+
+    def simulate_transaction(
+        self, transaction_base64: str, *, now: datetime | None = None
+    ) -> SimulationOutcome:
+        """Simulate a transaction against the cluster. Sends nothing.
+
+        `simulateTransaction` executes against current chain state and returns
+        what *would* happen. It is the enforcement point for CLAUDE.md rule 3,
+        and the outcome it returns is digest-bound to these exact bytes so that
+        `live.preflight` can refuse a send of anything else.
+
+        `sigVerify` is deliberately false: the transaction is unsigned at this
+        stage, and signature verification is not what we are asking about. We
+        are asking whether the swap would succeed against current state.
+
+        A simulation the cluster refuses to run, or answers malformed, raises —
+        an unanswered question is not a passing answer, and preflight's own
+        default is refusal anyway.
+        """
+        moment = now or datetime.now(timezone.utc)
+        result = self._rpc(
+            "simulateTransaction",
+            [
+                transaction_base64,
+                {
+                    "encoding": "base64",
+                    "sigVerify": False,
+                    "replaceRecentBlockhash": True,
+                    "commitment": "confirmed",
+                },
+            ],
+        )
+        if not isinstance(result, dict):
+            raise ProviderError(PROVIDER, "simulateTransaction: result was not an object")
+        value = result.get("value")
+        if not isinstance(value, dict):
+            raise ProviderError(PROVIDER, "simulateTransaction: result had no value object")
+
+        error = value.get("err")
+        logs = value.get("logs") or []
+        return SimulationOutcome(
+            transaction_digest=digest_of(base64.b64decode(transaction_base64)),
+            # err is null on success and an object/string describing the fault
+            # otherwise. Anything that is not null is a failure, including
+            # shapes we do not recognise — an unrecognised error is still an
+            # error, and guessing otherwise would send a failing transaction.
+            succeeded=error is None,
+            simulated_at=moment,
+            error=None if error is None else str(error),
+            logs=tuple(str(line) for line in logs if isinstance(line, str)),
+        )
+
+
+class HeliusTransactionSubmitter(HeliusRpcClient):
+    """The one class in this project that can put bytes on chain.
+
+    Separate from `HeliusRpcClient` for the same reason `JupiterSwapClient` is
+    separate from `JupiterQuoteClient`: code that only reads prices or
+    simulates must have no method capable of transmitting, and the surface
+    tests on the parent pin that. Inheritance keeps the RPC plumbing shared
+    while leaving the read-only class genuinely read-only.
+
+    It performs NO policy. It does not know about authorisations, gates or
+    risk — `live.sender.TransactionSender` owns all of that and is the only
+    intended caller. Putting a check here as well would create a second place
+    where "may we send?" is answered, and two answers eventually disagree.
+    """
+
+    def send_transaction(self, transaction_base64: str) -> str:
+        """Submit a signed transaction. Returns its signature.
+
+        `skipPreflight` is false: the cluster runs its own preflight as a last
+        line of defence. `maxRetries` is 0 because a retry would re-broadcast
+        bytes whose blockhash may have expired, and the caller — which holds
+        the single-use authorisation — is the only thing that may decide to
+        try again.
+        """
+        result = self._rpc(
+            "sendTransaction",
+            [
+                transaction_base64,
+                {
+                    "encoding": "base64",
+                    "skipPreflight": False,
+                    "preflightCommitment": "confirmed",
+                    "maxRetries": 0,
+                },
+            ],
+        )
+        if not isinstance(result, str) or not result:
+            raise ProviderError(
+                PROVIDER, "sendTransaction: result was not a transaction signature"
+            )
+        return result

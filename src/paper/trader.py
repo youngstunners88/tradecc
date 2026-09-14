@@ -92,13 +92,42 @@ class PaperTrader:
         return self._risk
 
     def tick(self, state: PaperSessionState, now: datetime | None = None) -> TickResult:
-        """Run one decision cycle. Provider failures are returned, not raised.
+        """Run one decision cycle. Failures are returned, not raised.
 
         A 30-day unattended run must survive a bad afternoon at a provider.
         An exception escaping here would end the session and, with it, the
         validation window.
+
+        This used to catch only `ProviderError`, which is narrower than that
+        promise. A stress run over 400 hostile ticks died on the first
+        exception of any other type, and several are reachable in a month of
+        unattended operation: OSError from the candle cache on a full disk,
+        JSONDecodeError from a truncated cache file, ValueError from a
+        provider price of zero or a size that rounds to no atomic units,
+        InvalidOperation on a pathological decimal.
+
+        So the outer boundary catches broadly — but loudly, at ERROR with the
+        exception type, and it returns a distinct `tick_error` action rather
+        than something that reads like a normal quiet tick. A run that fails
+        every tick still cannot manufacture a passing gate: it produces no
+        trades, and `trade_count` must reach MIN_POOLED_TRADES.
         """
         moment = now or datetime.now(timezone.utc)
+        try:
+            return self._tick_inner(state, moment)
+        except ProviderError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - the session must outlive one bad tick
+            logger.exception("tick_failed", extra={"error_type": type(exc).__name__})
+            log_and_track(
+                "paper.tick_failed",
+                level=logging.ERROR,
+                error_type=type(exc).__name__,
+                detail=str(exc),
+            )
+            return TickResult(moment, "tick_error", error=f"{type(exc).__name__}: {exc}")
+
+    def _tick_inner(self, state: PaperSessionState, moment: datetime) -> TickResult:
         try:
             candles = self._candles.fetch_candles(
                 self._config.paper.pool_address,
@@ -155,7 +184,21 @@ class PaperTrader:
 
         size_usd = self._config.risk.position_size_usd
         quote = self._live_quote(state.token_mint, Side.BUY, size_usd)
-        intent = TradeIntent(signal=signal, quote=quote, size_usd=size_usd, mode=self._config.mode)
+        creates_account = state.token_mint not in state.funded_mints
+        # Estimated before approval, so the risk engine can veto a trade whose
+        # modelled cost has gone absurd — see risk/fees.py.
+        estimated = self._fills.estimate_costs(
+            size_usd,
+            creates_token_account=creates_account,
+            sol_price_usd=sol_price_from_close(state.token_mint, price),
+        )
+        intent = TradeIntent(
+            signal=signal,
+            quote=quote,
+            size_usd=size_usd,
+            mode=self._config.mode,
+            estimated_fee_usd=estimated.total_usd,
+        )
 
         decision = self._risk.approve(intent, moment)
         if not decision.approved:
@@ -163,7 +206,6 @@ class PaperTrader:
                 moment, "entry_blocked", detail=decision.describe(), signal=signal.type
             )
 
-        creates_account = state.token_mint not in state.funded_mints
         fill = self._fills.simulate(
             quote,
             size_usd,
@@ -218,6 +260,21 @@ class PaperTrader:
             creates_token_account=False,
             sol_price_usd=sol_price_from_close(state.token_mint, price),
         )
+        # An exit is never blocked on cost. The fee check vetoes entries, but
+        # refusing to close a position because closing it looks expensive
+        # leaves the bot holding risk it decided to shed — strictly worse. It
+        # is still worth saying loudly, because it means the price feed
+        # driving the cost model has probably gone wrong.
+        fee_cap = position.size_usd * self._config.risk.max_fee_fraction_of_size
+        if fill.fee_usd > fee_cap:
+            log_and_track(
+                "risk.exit_cost_implausible",
+                level=logging.ERROR,
+                token=state.token_mint,
+                modeled_fee_usd=fill.fee_usd,
+                size_usd=position.size_usd,
+                detail="exiting anyway; check the SOL price feed",
+            )
         trade = ClosedTrade(
             token_mint=position.token_mint,
             entry_at=position.opened_at,
@@ -273,13 +330,29 @@ class PaperTrader:
 
         if side is Side.BUY:
             input_mint, output_mint = paper.quote_mint, token_mint
+            input_decimals, output_decimals = (
+                paper.quote_mint_decimals,
+                paper.token_mint_decimals,
+            )
             amount_atomic = int(size_usd * (Decimal(10) ** paper.quote_mint_decimals))
         else:
             input_mint, output_mint = token_mint, paper.quote_mint
+            input_decimals, output_decimals = (
+                paper.token_mint_decimals,
+                paper.quote_mint_decimals,
+            )
             if entry_price is None or entry_price <= 0:
                 raise ValueError("a SELL quote needs the entry price to size the token amount")
             quantity = size_usd / entry_price
             amount_atomic = int(quantity * (Decimal(10) ** paper.token_mint_decimals))
+
+        if amount_atomic <= 0:
+            # A position small enough to round to zero atomic units cannot be
+            # priced, and asking anyway returns a quote for a different trade.
+            raise ValueError(
+                f"{side.value} size {size_usd} rounds to zero atomic units at "
+                f"{input_decimals} decimals — too small to quote"
+            )
 
         return self._quotes.get_quote(
             input_mint=input_mint,
@@ -287,6 +360,8 @@ class PaperTrader:
             amount_atomic=amount_atomic,
             slippage_bps=slippage_bps,
             amount_usd=size_usd,
+            input_decimals=input_decimals,
+            output_decimals=output_decimals,
             side=side,
         )
 

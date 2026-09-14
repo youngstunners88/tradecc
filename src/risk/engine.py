@@ -22,6 +22,7 @@ from core.logging import get_logger
 from core.telemetry import log_and_track
 from core.types import Mode, Position, RejectionCode, RiskDecision, TradeIntent
 from risk.circuit_breaker import DailyCircuitBreaker
+from risk.fees import check_fee_ratio
 from risk.position_sizing import check_position_size
 from risk.slippage import check_slippage
 from risk.state import DailyRiskState, RiskStateStorage, RiskStateStore
@@ -55,6 +56,9 @@ class RiskEngine:
         decision = decision.merged_with(check_position_size(intent.size_usd, self._config.risk))
         decision = decision.merged_with(
             check_slippage(intent.quote, self._config.risk.max_slippage_pct)
+        )
+        decision = decision.merged_with(
+            check_fee_ratio(intent.estimated_fee_usd, intent.size_usd, self._config.risk)
         )
 
         logger.info(

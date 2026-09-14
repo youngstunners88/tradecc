@@ -16,6 +16,16 @@ from tests.test_http import FakeTransport, response
 TOKEN = "So11111111111111111111111111111111111111112"
 USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 
+SELL_PAYLOAD = {
+    "inputMint": TOKEN,
+    "inAmount": "1000000000",
+    "outputMint": USDC,
+    "outAmount": "10000000",
+    "otherAmountThreshold": "9950000",
+    "swapMode": "ExactIn",
+    "slippageBps": 50,
+}
+
 QUOTE_PAYLOAD = {
     "inputMint": USDC,
     "inAmount": "10000000",
@@ -43,6 +53,8 @@ def get_quote(transport, **overrides):
         "amount_atomic": 10_000_000,
         "slippage_bps": 50,
         "amount_usd": Decimal("10"),
+        "input_decimals": 6,
+        "output_decimals": 9,
         **overrides,
     }
     return make_client(transport).get_quote(**kwargs)
@@ -61,8 +73,9 @@ def test_worst_case_price_comes_from_other_amount_threshold():
     """The threshold is the number the risk engine's slippage cap reads."""
     quote = get_quote(FakeTransport(response(200, QUOTE_PAYLOAD)))
 
-    assert quote.expected_price == Decimal(10_000_000) / Decimal(1_000_000)
-    assert quote.worst_case_price == Decimal(10_000_000) / Decimal(995_000)
+    scale = Decimal(10) ** (9 - 6)  # token decimals minus quote-asset decimals
+    assert quote.expected_price == Decimal(10_000_000) / Decimal(1_000_000) * scale
+    assert quote.worst_case_price == Decimal(10_000_000) / Decimal(995_000) * scale
     assert quote.worst_case_price > quote.expected_price
 
 
@@ -139,7 +152,7 @@ def test_rejects_negative_slippage():
 def test_detailed_quote_exposes_the_raw_payload():
     client = make_client(FakeTransport(response(200, QUOTE_PAYLOAD)))
 
-    detailed = client.get_quote_detailed(USDC, TOKEN, 10_000_000, 50, Decimal("10"))
+    detailed = client.get_quote_detailed(USDC, TOKEN, 10_000_000, 50, Decimal("10"), 6, 9)
 
     assert detailed.raw["swapMode"] == "ExactIn"
 
@@ -149,14 +162,27 @@ def test_mock_and_real_client_are_substitutable():
     from execution.client import QuoteSource
     from execution.mock import MockQuoteSource
 
-    real: QuoteSource = make_client(FakeTransport(response(200, QUOTE_PAYLOAD)))
+    # Two queued responses: one BUY leg and one SELL leg.
+    real: QuoteSource = make_client(
+        FakeTransport(response(200, QUOTE_PAYLOAD), response(200, SELL_PAYLOAD))
+    )
     fake: QuoteSource = MockQuoteSource()
 
-    args = (USDC, TOKEN, 10_000_000, 50, Decimal("10"))
+    args = (USDC, TOKEN, 10_000_000, 50, Decimal("10"), 6, 9)
     for source in (real, fake):
         quote = source.get_quote(*args)
         assert quote.token_mint == TOKEN
         assert quote.worst_case_price >= quote.expected_price
+
+    # Both must also agree on the SELL convention, or the seam hides a unit
+    # error on exactly the leg that closes a position.
+    sell_args = (TOKEN, USDC, 10_000_000, 50, Decimal("10"), 9, 6)
+    for source in (real, fake):
+        quote = source.get_quote(*sell_args, side=Side.SELL)
+        assert quote.token_mint == TOKEN, "a SELL prices the token, not the quote asset"
+        assert quote.worst_case_price <= quote.expected_price, (
+            "adverse on a SELL means a LOWER price"
+        )
 
     assert isinstance(real, QuoteSource)
     assert isinstance(fake, QuoteSource)
@@ -176,6 +202,8 @@ def get_detailed(transport, payload_overrides=None):
         amount_atomic=10_000_000,
         slippage_bps=50,
         amount_usd=Decimal("10"),
+        input_decimals=6,
+        output_decimals=9,
     )
 
 

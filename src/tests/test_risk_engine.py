@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from core.types import Mode, RejectionCode
+from core.types import Mode, RejectionCode, TradeIntent
 from risk.engine import RiskEngine
 from tests.conftest import make_intent, make_quote
 from tests.test_gate import VALID_GATE, gate_payload
@@ -163,3 +163,69 @@ def test_tighter_config_limits_are_honoured(run_config, store, now):
     intent = make_intent(quote=make_quote(expected="100", worst_case="100.2"))  # 0.2%
 
     assert not engine.approve(intent, now).approved
+
+
+# --- modelled cost sanity --------------------------------------------------
+#
+# Found by stress test, not by review: at a corrupted SOL price the cost model
+# estimated 38,880% of a $10 position and every other control approved the
+# trade. Size was $10, slippage was in band, the breaker was clean — nothing
+# had grounds to object.
+
+
+def test_absurd_modelled_cost_is_rejected(run_config):
+    from risk.engine import RiskEngine
+    from risk.state import InMemoryRiskStateStore
+
+    engine = RiskEngine(run_config, InMemoryRiskStateStore())
+    intent = make_intent()
+    absurd = TradeIntent(
+        signal=intent.signal,
+        quote=intent.quote,
+        size_usd=intent.size_usd,
+        mode=intent.mode,
+        estimated_fee_usd=Decimal("3888"),
+    )
+
+    decision = engine.approve(absurd)
+
+    assert not decision.approved
+    assert RejectionCode.FEES_EXCEED_SIZE in decision.codes
+
+
+def test_a_realistic_cost_is_approved(run_config):
+    """The first trade pays one-off ATA rent — about 2.1% of $10 at a $100
+    SOL price. The ceiling must not fire on that."""
+    from risk.engine import RiskEngine
+    from risk.state import InMemoryRiskStateStore
+
+    engine = RiskEngine(run_config, InMemoryRiskStateStore())
+    intent = make_intent()
+    realistic = TradeIntent(
+        signal=intent.signal,
+        quote=intent.quote,
+        size_usd=intent.size_usd,
+        mode=intent.mode,
+        estimated_fee_usd=Decimal("0.2102"),
+    )
+
+    assert engine.approve(realistic).approved
+
+
+def test_an_unestimated_cost_abstains_rather_than_approving_blind(run_config):
+    """`None` means "not measured", not "free". The check must neither reject
+    (that would break every caller that cannot estimate) nor treat the absence
+    as a passing measurement."""
+    from risk.fees import check_fee_ratio
+
+    assert check_fee_ratio(None, Decimal("10"), run_config.risk).approved
+    assert not check_fee_ratio(Decimal("3888"), Decimal("10"), run_config.risk).approved
+
+
+def test_the_ceiling_scales_with_position_size(run_config):
+    """A fee that is fine on a $100 trade is not fine on a $5 one."""
+    from risk.fees import check_fee_ratio
+
+    fee = Decimal("2.00")
+    assert check_fee_ratio(fee, Decimal("100"), run_config.risk).approved
+    assert not check_fee_ratio(fee, Decimal("5"), run_config.risk).approved

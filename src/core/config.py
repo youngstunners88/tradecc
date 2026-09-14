@@ -44,6 +44,25 @@ class RiskConfig(StrictModel):
     per_trade_stop_loss_pct: Decimal = Decimal("5")
     per_trade_take_profit_pct: Decimal = Decimal("10")
 
+    # Ceiling on modelled cost as a fraction of position size. Fees are
+    # denominated in SOL and converted at a price read from the market, so a
+    # bad price feed inflates them without bound: a stress run at a corrupted
+    # SOL price produced an estimate of **38,880% of a $10 position** and
+    # nothing objected. At a sane $100 SOL the first trade (which pays
+    # one-off ATA rent) costs ~2.1% of $10 and later ones ~0.06%, so 25%
+    # leaves an order of magnitude of headroom while still catching a feed
+    # that has gone obviously wrong.
+    max_fee_fraction_of_size: Decimal = Decimal("0.25")
+
+    # CLAUDE.md rule 2 — a dedicated hot wallet, never the user's main wallet,
+    # funded only with capital they can afford to lose. Nothing could enforce
+    # that until sending existed; now it can, approximately but usefully: a
+    # wallet holding a lot of SOL is probably not the throwaway. The sender
+    # refuses to transmit from a wallet above this balance. Expressed in SOL
+    # rather than USD so the check needs no price feed — the one input that
+    # has already gone wrong here once.
+    max_hot_wallet_sol: Decimal = Decimal("1.0")
+
     # Must be set to true to run a position size above the $10 soft ceiling.
     # Its only purpose is to make scaling up a deliberate, visible act.
     position_size_override_ack: bool = False
@@ -54,6 +73,8 @@ class RiskConfig(StrictModel):
         "daily_loss_limit_usd",
         "per_trade_stop_loss_pct",
         "per_trade_take_profit_pct",
+        "max_fee_fraction_of_size",
+        "max_hot_wallet_sol",
         mode="before",
     )
     @classmethod
@@ -80,6 +101,8 @@ class RiskConfig(StrictModel):
         "daily_loss_limit_usd",
         "per_trade_stop_loss_pct",
         "per_trade_take_profit_pct",
+        "max_fee_fraction_of_size",
+        "max_hot_wallet_sol",
     )
     @classmethod
     def _must_be_positive(cls, value: Decimal) -> Decimal:

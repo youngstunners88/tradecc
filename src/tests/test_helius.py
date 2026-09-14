@@ -146,8 +146,14 @@ def test_error_message_does_not_leak_the_key():
     assert FAKE_API_KEY not in str(exc.value)
 
 
-def test_client_exposes_no_send_or_simulate_method():
-    """Stage 2 is read-only: signing and sending arrive in Stage 6."""
+def test_client_exposes_no_send_or_sign_method():
+    """The client may read and may simulate. It may not send or sign.
+
+    Simulation was added in Stage 6a and transmits nothing: `simulateTransaction`
+    asks the cluster what *would* happen and is the enforcement point for
+    CLAUDE.md rule 3. Sending and signing are still absent, and this pins that —
+    the surface is asserted exactly, so a new method cannot appear unnoticed.
+    """
     surface = {name for name in dir(HeliusRpcClient) if not name.startswith("_")}
 
     assert surface == {
@@ -155,4 +161,14 @@ def test_client_exposes_no_send_or_simulate_method():
         "get_balance_lamports",
         "get_balance_sol",
         "get_latest_blockhash",
+        "simulate_transaction",
     }
+
+
+def test_no_method_anywhere_in_the_client_can_transmit():
+    """Named-based guard, in case the surface assertion is ever relaxed."""
+    forbidden = ("send", "sign", "submit", "broadcast", "transfer", "keypair", "secret")
+    names = [name for name in dir(HeliusRpcClient) if not name.startswith("_")]
+
+    for name in names:
+        assert not any(word in name.lower() for word in forbidden), name

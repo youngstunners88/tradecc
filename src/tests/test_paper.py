@@ -484,3 +484,59 @@ def test_sell_quote_refuses_without_an_entry_price(config, strategy):
     paper_trader, _ = trader(config, strategy, candles([100, 101]))
     with _pytest.raises(ValueError):
         paper_trader._live_quote(TOKEN, Side.SELL, Decimal("10"))
+
+
+# --- exit paths other than stop-loss ------------------------------------
+#
+# The stop-loss exit was covered; take-profit, strategy-sell and
+# holding-position were not. These are the branches of the only trading loop
+# that exists, and the paper SELL sizing bug lived in exactly this path.
+
+
+def test_take_profit_exit_closes_the_position(config, strategy):
+    """Entry at 100 with a 10% take-profit exits once price reaches 110.
+    BUY_SERIES ends at 96, so a low entry is what puts price above target."""
+    paper, store = trader(config, strategy, candles(BUY_SERIES))
+    state = fresh_state(store)
+    state.open_position = Position(TOKEN, Decimal("50"), Decimal("10"), START)
+    state.open_entry_fees_usd = Decimal("0.41")
+
+    result = paper.tick(state, now=START + timedelta(minutes=15))
+
+    assert result.action == "exited"
+    assert state.open_position is None
+    assert state.trades[0].exit_reason == "take_profit"
+    assert state.trades[0].net_pnl_usd > 0, "a take-profit must close in profit after fees"
+
+
+def test_a_position_inside_its_bounds_is_held(config, strategy):
+    """Neither stop nor target hit, and no SELL signal: the position stays
+    open and nothing is recorded."""
+    paper, store = trader(config, strategy, candles(BUY_SERIES))
+    state = fresh_state(store)
+    state.open_position = Position(TOKEN, Decimal("96"), Decimal("10"), START)
+    state.open_entry_fees_usd = Decimal("0.41")
+
+    result = paper.tick(state, now=START + timedelta(minutes=15))
+
+    assert result.action == "holding_position"
+    assert state.open_position is not None
+    assert state.trades == []
+
+
+def test_exit_slippage_is_adverse_for_a_seller(config, strategy):
+    """A SELL must fill BELOW the quote's expected price. Adverse means worse
+    for us, and worse when selling is receiving less — the opposite direction
+    from a BUY. The quote source used to apply BUY-direction slippage to both
+    sides, so every simulated exit was optimistic."""
+    quotes = MockQuoteSource(expected_price=Decimal("100"), slippage_pct=Decimal("0.2"))
+    paper, store = trader(config, strategy, candles(BUY_SERIES), quotes=quotes)
+    state = fresh_state(store)
+    state.open_position = Position(TOKEN, Decimal("200"), Decimal("10"), START)
+    state.open_entry_fees_usd = Decimal("0.41")
+
+    paper.tick(state, now=START + timedelta(minutes=15))
+
+    trade = state.trades[0]
+    assert trade.exit_price == Decimal("100") * Decimal("0.998")
+    assert trade.exit_price < Decimal("100"), "a SELL must fill below expected"

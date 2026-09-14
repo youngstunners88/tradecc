@@ -45,6 +45,9 @@ SECRET_ENV_NAMES = (
     "POSTHOG_API_KEY",
     "OPENROUTER_API_KEY",
     "AGENTMAIL_API_KEY",
+    # Stage 6c. Registered here with the others so it is masked before any
+    # component can read the environment, not after.
+    "SOLANA_PRIVATE_KEY",
 )
 
 

@@ -211,11 +211,25 @@ class BacktestRunner:
     ) -> tuple[Position, Decimal] | None:
         size_usd = self._config.risk.position_size_usd
         quote = self._synthetic_quote(signal.token_mint, candle, Side.BUY, size_usd)
+        creates_account = signal.token_mint not in funded_mints
+        decision_at = self._decision_at(candle)
+        # Estimated before approval so the backtest gets the same cost-sanity
+        # veto as paper. Both produce the expectancy the gate reads, so a
+        # corrupted price inflating fees must be caught in both or the check
+        # only covers half the evidence.
+        estimated = self._fills.estimate_costs(
+            size_usd,
+            creates_token_account=creates_account,
+            sol_price_usd=self._sol_price_at(signal.token_mint, candle),
+        )
         intent = TradeIntent(
-            signal=signal, quote=quote, size_usd=size_usd, mode=Mode.BACKTEST
+            signal=signal,
+            quote=quote,
+            size_usd=size_usd,
+            mode=Mode.BACKTEST,
+            estimated_fee_usd=estimated.total_usd,
         )
 
-        decision_at = self._decision_at(candle)
         decision = self._risk.approve(intent, decision_at)
         if not decision.approved:
             result.entries_blocked_by_risk += 1
@@ -223,7 +237,6 @@ class BacktestRunner:
                 result.block_reasons[code.value] = result.block_reasons.get(code.value, 0) + 1
             return None
 
-        creates_account = signal.token_mint not in funded_mints
         fill = self._fills.simulate(
             quote,
             size_usd,

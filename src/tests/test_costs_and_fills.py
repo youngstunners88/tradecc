@@ -173,7 +173,12 @@ def test_fill_carries_the_modelled_costs(model):
 
 
 def test_fill_preserves_side_and_mint(model):
-    quote = MockQuoteSource().get_quote("usdc", TOKEN, 1_000, 50, Decimal("10"), Side.SELL)
+    # A SELL sends the TOKEN and receives the quote asset. The mints were the
+    # other way round here, which only went unnoticed while the quote source
+    # ignored side entirely.
+    quote = MockQuoteSource().get_quote(
+        TOKEN, "usdc", 1_000, 50, Decimal("10"), 9, 6, side=Side.SELL
+    )
 
     fill = FillSimulator(model).simulate(quote, Decimal("10"))
 
