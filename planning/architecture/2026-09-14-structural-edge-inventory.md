@@ -44,17 +44,29 @@ hunting, depeg arbitrage and CEX↔DEX listing arbitrage are all cause 1;
 statistical arbitrage on correlated pairs is cause 4, since a spread is still a
 draw from a return distribution and `edge_budget.py` applies unchanged.
 
-## Two verdicts need citations
+## Two verdicts needed citations — now supplied
 
-**DEX market-making (LVR) and funding-rate carry appear nowhere in this
-repository.** They were supplied as established findings and they are
-plausible — but a future session grepping `planning/` will not find them, and
-may re-open either as a fresh idea.
+**DEX market-making (LVR) and funding-rate carry appeared nowhere in this
+repository.** They were supplied as established findings and they were
+plausible — but a future session grepping `planning/` would not have found
+them, and might have re-opened either as a fresh idea.
 
-They are recorded in the skill's ledger with that caveat marked. If either is
-ever revisited, it deserves a proper decision record — not because the verdict
-is in doubt, but because an undocumented verdict is one nobody can check and
-anybody can accidentally repeat.
+Both now have decision records, drafted 2026-09-14:
+
+- `planning/decisions/2026-09-14-dex-market-making-lvr.md`
+- `planning/decisions/2026-09-14-funding-rate-carry.md`
+
+Neither is a new investigation. Each supplies the reasoning behind a verdict
+that was already recorded, which is what was missing. Both were DeepSeek-drafted
+and reviewed by re-derivation; the LVR record carries two corrections found
+that way, and both records end with the review that found them.
+
+The verdicts did not change. What changed is that they can now be checked.
+
+**One question surfaced that was not in the source:** the funding-rate ledger
+row says "$100–500 minimum" without saying whether that is per leg or total.
+A two-legged carry plausibly doubles it. Worth resolving before that category
+is ever reopened.
 
 ## What the constraint actually is
 

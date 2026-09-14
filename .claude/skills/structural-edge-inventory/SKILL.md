@@ -25,20 +25,27 @@ re-derives a closed verdict at the cost of another test window.
 | pump.fun graduation timing | **Parked** | Data infrastructure — historical middle window unreachable; only forward collection works, a weeks-long commitment that was declined | `2026-09-13-pumpfun-graduation-duration.md`, PR #5 |
 | Directional prediction | **Closed (class)** | Requires 73.8–94.8% direction accuracy; achievable is mid-50s | `2026-09-14-close-directional-prediction-class.md` |
 | Capital-range increase | **Closed** | Costs were never the binding constraint; strategy asymptotes at ~22% of buy-and-hold | `2026-09-13-capital-range-sensitivity.md` |
-| DEX market-making / LP | **Rejected** | Loss-versus-rebalancing — a passive LP is adversely selected by arbitrageurs; the fee income does not compensate | ⚠️ **not recorded in-repo** (see below) |
-| Funding-rate carry / basis | **On hold** | Requires a perps venue (not Solana spot), and a $100–500 minimum — outside both the current scope and the $5–$10 size | ⚠️ **not recorded in-repo** (see below) |
+| DEX market-making / LP | **Rejected** | Loss-versus-rebalancing — a passive LP is adversely selected by arbitrageurs; the fee income does not compensate | `2026-09-14-dex-market-making-lvr.md` |
+| Funding-rate carry / basis | **On hold** | Requires a perps venue (not Solana spot), and a $100–500 minimum — outside both the current scope and the $5–$10 size | `2026-09-14-funding-rate-carry.md` |
 
-## Two verdicts are asserted but undocumented
+## The two uncited verdicts now have records
 
-**DEX market-making (LVR) and funding-rate carry do not appear anywhere in the
-repository.** They were stated as established findings, and they are plausible
-ones, but a future session grepping `planning/` will not find them and may
-re-open either as a "new idea".
+**DEX market-making (LVR) and funding-rate carry used to appear nowhere in the
+repository.** They were stated as established findings — plausible ones, but a
+session grepping `planning/` would not have found them and might have re-opened
+either as a "new idea".
 
-Treat them as **real verdicts with missing citations**. Either is a legitimate
-candidate for a proper decision record if it is ever revisited — not because
-the verdict is doubted, but because an undocumented verdict is one nobody can
-check and everybody can accidentally repeat.
+Both were written up on 2026-09-14 and the ledger above now cites them. The
+verdicts did not change; the reasoning behind them is now checkable, which is
+the whole point. Each record says explicitly that it documents an existing
+verdict rather than reporting a new investigation.
+
+Funding-rate carry is worth reading in full if the capital scale ever changes:
+it is **the one category in the ledger closed by scope rather than by an
+impossibility**, and the only one an extra zero on the account size would
+reopen. Its record also flags an ambiguity nobody had noticed — whether the
+"$100–500 minimum" is per leg or total, which for a two-legged position is the
+difference between $100 and $1,000.
 
 ## The reasons collapse into four
 
