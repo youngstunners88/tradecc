@@ -103,6 +103,10 @@ class TradeIntent:
     quote: Quote
     size_usd: Decimal
     mode: Mode
+    # Modelled cost of this trade, when the caller has estimated it. `None`
+    # means "not estimated", which is not the same as "free" — the fee check
+    # abstains rather than approving something it could not measure.
+    estimated_fee_usd: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -146,6 +150,7 @@ class RejectionCode(str, Enum):
     DAILY_LOSS_LIMIT = "daily_loss_limit"
     CIRCUIT_BREAKER_TRIPPED = "circuit_breaker_tripped"
     LIVE_GATE_NOT_MET = "live_gate_not_met"
+    FEES_EXCEED_SIZE = "fees_exceed_size"
 
 
 @dataclass(frozen=True)
