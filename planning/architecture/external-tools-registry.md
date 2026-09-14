@@ -27,7 +27,36 @@ reasoning) · PARKED (not relevant now, no verdict needed)
 | TauricResearch/TradingAgents | github.com/TauricResearch/TradingAgents | **Reference only, never installed.** Debate-then-veto multi-agent pattern informing `astra-analyst`; also flagged the look-ahead-bias bug class we audited for | `planning/architecture/tradingagents-reference-notes.md` |
 | freqtrade/freqtrade | github.com/freqtrade/freqtrade | **Reference only, never installed.** CEX-focused, can't execute Solana trades — used as a maturity check on our walk-forward/hyperopt discipline | `research/backtest-methodology-references.md` |
 | jesse-ai/jesse | github.com/jesse-ai/jesse | **Reference only, never installed.** Same treatment as freqtrade | `research/backtest-methodology-references.md` |
+| LuxAlgo/luxalgo-mcp-server | github.com/LuxAlgo/luxalgo-mcp-server | **REFERENCE ONLY — Library tools only, unauthenticated.** MIT-licensed. Queryable definitions and formulas for ~861 TA concepts, used when `edge-viability-check` needs a concept's formal definition before testing it. **Never a dependency, never called from any execution path.** See the boundary correction below — "read-only" is true of the Library subset, not of the whole server | `.claude/skills/edge-viability-check/` (reference in prose only) |
+| OpenRouter → DeepSeek V4 Pro — **research only** | openrouter.ai (`deepseek/deepseek-v4-pro`) | Heavy-context research drafting: structural-edge literature lookup, edge-viability arithmetic, decision-record drafts. **Isolated by construction** — no gate state, no fingerprint data, no wallet information, no secrets; never imported from `src/`; no output reaches a trade decision without human review. Key is `OPENROUTER_API_KEY`, env-var only, already in `SECRET_ENV_NAMES` (`src/cli.py`). Every artifact it helps write carries a DeepSeek-assisted provenance note | `.claude/skills/openrouter-deepseek/` |
 | `tradecc-security` / `tradecc-risk-controls` / `tradecc-paper-validation` skills | (user-supplied upload, 2026-09-12) | Restate CLAUDE.md's seven rules and the mvp_spec gate as working checklists. Every path they reference was verified present before adoption. `static-security-scan.sh` was rewritten before adoption: its shape-regex secret detection and its INFO→HIGH escalation made it exit 1 on a clean repo | `.claude/skills/tradecc-*/` |
+
+### LuxAlgo MCP — the boundary is narrower than "read-only"
+
+Adopted on the stated basis that it is read-only and keyless with no
+execution surface. **Verified against the repository, and that is true only of
+the Library tools.** The server as a whole also exposes:
+
+- **Trade Journal — read AND write** (annotations, notes, manual trade logging)
+  when signed in via LuxAlgo OAuth
+- **Broker integrations** — read-only account data, local stdio transport only
+- Edge Stats, Market Trackers, Challenge Simulator, Prop Firm Directory
+
+There is no order placement or fund transfer anywhere in it, so the "no
+execution surface" conclusion survives. But "keyless and read-only" holds only
+while it stays **unauthenticated and restricted to the Library tools**, which
+is the whole of the adopted scope.
+
+**The boundary, stated so it cannot drift:** query concepts, indicators and
+formulas. Do not sign in. Do not touch Trade Journal or broker tools. Do not
+add it to `.mcp.json`, `settings.json`, or any dependency file — this is a
+reference in prose, exactly like TradingAgents.
+
+## NOT ADOPTED — license reviewed, no decision taken
+
+| Tool | Link | Finding |
+|---|---|---|
+| LuxAlgo/PineTS | github.com/LuxAlgo/PineTS | **AGPL-3.0, with a commercial dual-license option** (business@luxalgo.com). Verified from the repository, not from a summary. Node.js/browser runtime — this project is Python, so using it means a second runtime regardless of licence. **Not installed. No obligation is created by reading about it.** See the obligation analysis in `planning/architecture/2026-09-14-pinets-license-review.md` |
 
 ## ADOPTED, PENDING WIRING
 
@@ -52,7 +81,7 @@ different branches.
 | dexscreener-cli-mcp-tool | github.com/vibeforge1111/dexscreener-cli-mcp-tool | Skill proposed (`dexscreener-scan`), not built — held with rest of v0.2 |
 | teamlore | npmjs.com/package/teamlore | Confirmed to be the legitimate small `.lore/` tool (zero deps, `teamlore@0.3.0`). Still not run — needs explicit go, and `DO_NOT_TRACK=1` must be set when it is |
 | Firecrawl, TinyFish, BrowserUse | browser-use: github.com/browser-use/browser-use — Firecrawl/TinyFish: no verified repo link on file, env-var references only | `web-research-vetting` skill — gated to v0.2 wallet-vetting research only. Never for core price/execution data. Do not trigger on current momentum/cross-sectional-momentum work |
-| OpenRouter | openrouter.ai | `openrouter` skill built for `astra-analyst`'s eventual LLM calls (verified `openai/gpt-6-astra` pricing live). Not called anywhere yet — `astra-analyst` isn't merged |
+| OpenRouter — **trade-adjacent use** | openrouter.ai | `openrouter` skill built for `astra-analyst`'s eventual LLM calls (verified `openai/gpt-6-astra` pricing live). Not called anywhere yet — `astra-analyst` isn't merged. **Still gated.** The research-only DeepSeek route is a separate, narrower adoption (see ADOPTED) and does not unlock this one |
 
 ## EVALUATING — no decision yet, do not install pending review
 

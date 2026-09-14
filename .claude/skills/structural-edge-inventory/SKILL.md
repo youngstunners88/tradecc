@@ -94,6 +94,37 @@ and all three are the user's call, not something to build toward:
    Paid, historical, point-in-time-clean data would reopen copy-trading and
    pump.fun as *testable* — not as known-good.
 
+## Heavy analysis routes to DeepSeek
+
+When a candidate is genuinely not in the ledger and needs real work — a
+literature sweep for whether the mechanism has been measured elsewhere, a
+frequency-and-payoff estimate, a draft ledger entry — route the volume work
+to `.claude/skills/openrouter-deepseek` (`deepseek/deepseek-v4-pro` via
+OpenRouter). The context windows here are large (whole decision records,
+whole price series summaries) and that is what the model is cheap at.
+
+The division of labour does not move:
+
+- **DeepSeek drafts.** Literature lookup, arithmetic derivation, formula
+  verification against concept definitions from the LuxAlgo reference
+  (`planning/architecture/external-tools-registry.md` — reference only, not
+  installed), and a first pass at the ledger row.
+- **Claude Code orchestrates and reviews.** Which of the four causes the
+  candidate must escape, whether the escape argument holds, and whether
+  anything is committed — those are not the model's calls.
+- **The verdict is the user's.** Per the standing instruction, nothing is
+  built toward a structural edge without coming back to them first.
+
+Two constraints carry over verbatim from the DeepSeek skill:
+
+1. **Send it no gate state, no fingerprint data, no wallet information, and
+   no secrets.** The ledger, the decision records and public market data are
+   all fair game; the bot's runtime state is not.
+2. **Any ledger entry or analysis document DeepSeek helped write carries the
+   provenance note** — DeepSeek-assisted, reviewed before adoption, numeric
+   claims re-derived independently. An undocumented verdict is one nobody can
+   check; an unmarked model draft is the same problem wearing a different hat.
+
 ## How to use this
 
 **Before proposing any strategy idea:**

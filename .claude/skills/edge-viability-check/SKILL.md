@@ -78,6 +78,43 @@ whatever it pays.
 Check `.claude/skills/structural-edge-inventory` first. If the idea is already
 in the ledger it is closed, and this gate is not the place to relitigate it.
 
+## Who does the arithmetic
+
+Steps 1 and 4 are the compute-heavy ones — estimating a claimed edge with
+reasoning behind it, and deriving what the return distribution actually
+contains. Route that drafting to `.claude/skills/openrouter-deepseek`
+(`deepseek/deepseek-v4-pro` via OpenRouter): large context, flat pricing,
+and it is good at long derivations.
+
+What DeepSeek may do here:
+
+- Draft the step-1 edge estimate and the reasoning behind the number.
+- Draft the step-4 derivation, and verify a formula against how the concept
+  is formally defined — the LuxAlgo reference in
+  `planning/architecture/external-tools-registry.md` is there for exactly
+  this lookup (reference only; not installed, not called from any execution
+  path).
+- Draft the four answers into the hypothesis's decision record.
+
+What it may **not** do:
+
+- **Produce the numbers that decide steps 2 and 3.** Those come from
+  `research/trade_power.py` and `research/edge_budget.py`, run here, against
+  data on disk. A model's arithmetic is a draft of a derivation, never a
+  substitute for running the script — and a gate whose pass/fail came from a
+  model is not a gate.
+- Receive gate state, fingerprint data, wallet information or any secret.
+  The cost structure and the price series are not secret; the bot's runtime
+  state is, and none of it is needed to do this arithmetic.
+- Deliver a verdict. DeepSeek drafts; Claude Code reviews and re-derives; the
+  pass or fail is a human decision. Nothing the model outputs reaches a trade
+  decision without that review step in between.
+
+Any decision record carrying a DeepSeek-assisted derivation gets the
+provenance note from that skill — DeepSeek-assisted, reviewed before
+adoption, numeric claims re-derived independently, naming the script that
+re-derived them.
+
 ## The two errors this check is prone to
 
 Both were made while building it, both flattered the result, and both were
