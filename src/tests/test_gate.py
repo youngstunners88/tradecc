@@ -350,12 +350,11 @@ def test_unknown_fingerprint_sections_relock(tmp_path, run_config):
 @pytest.mark.parametrize(
     "failure",
     [
-        "validated_fingerprint missing — cannot prove this approval was granted",
         "configuration changed since approval — 'risk' differs: re-validate",
         "validated_fingerprint has unrecognised sections ['legacy'] — written by",
     ],
 )
-def test_fingerprint_mismatch_is_detected_for_every_fingerprint_failure(failure):
+def test_fingerprint_mismatch_is_detected_for_every_mismatch_failure(failure):
     from core.gate import GateResult
 
     assert GateResult(False, (failure,)).fingerprint_mismatch is True
@@ -375,6 +374,46 @@ def test_other_failures_are_not_reported_as_fingerprint_mismatches(failure):
     from core.gate import GateResult
 
     assert GateResult(False, (failure,)).fingerprint_mismatch is False
+
+
+def test_an_absent_fingerprint_is_not_a_mismatch(tmp_path, run_config):
+    """A gate nobody has approved is the ordinary locked state, not an
+    emergency. Reporting absence as a mismatch made every fresh install raise
+    an urgent alert whose body claimed an approval existed, and a gate that
+    cries wolf gets worked around."""
+    path = write_gate(tmp_path / "gate.json", validated_fingerprint=None)
+    result = evaluate_live_gate(path, run_config)
+
+    assert not result.unlocked
+    assert any("validated_fingerprint missing" in f for f in result.failures)
+    assert result.fingerprint_mismatch is False
+
+
+def test_deleting_a_fingerprint_still_reaches_the_operator(tmp_path, run_config):
+    """The urgency of a removed fingerprint is carried by the transition, not
+    by the mismatch flag: an approval that was unlocked and stops being so
+    raises `relocked`, which is urgent on its own."""
+    from core.alerts import Alerts
+    from core.gate_watch import RELOCKED, GateWatcher
+
+    class Recorder:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, alert):
+            self.sent.append(alert)
+
+    recorder = Recorder()
+    watcher = GateWatcher(tmp_path / "state", Alerts(recorder))
+
+    approved = write_gate(tmp_path / "gate.json", run_config)
+    assert watcher.observe(evaluate_live_gate(approved, run_config)) is not None
+
+    stripped = write_gate(tmp_path / "gate.json", validated_fingerprint=None)
+    transition = watcher.observe(evaluate_live_gate(stripped, run_config))
+    assert transition is not None
+    assert transition.kind == RELOCKED
+    assert transition.is_urgent
 
 
 def test_unlocked_gate_has_no_fingerprint_mismatch(tmp_path, run_config):

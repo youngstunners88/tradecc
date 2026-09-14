@@ -1,11 +1,18 @@
 # Decision: the max-drawdown threshold for the validation gate
 
 **Date:** 2026-09-13
-**Status:** **PROPOSED — NOT LOCKED.** The number below is a recommendation with
-its derivation shown. It becomes binding only when the user signs off and it is
-written into `ops/live-gate.json` with a `threshold_set_at` that predates the
-paper run. Until then the validation gate stays incomplete and `live` stays
-locked, exactly as `planning/specs/mvp_spec.md:122` says.
+**Status:** **LOCKED at 8%, 2026-09-14.** Approved by the user on the derivation
+below and written into `ops/live-gate.json` with
+`threshold_set_at: 2026-09-14T00:41:03+00:00`. The gate remains **locked** — the
+threshold was the only outstanding *decision*; the other five checks await
+evidence that does not exist yet.
+
+**The threshold is now immutable in the only way that matters.** `core/gate.py`
+fails the gate when `threshold_set_at` is later than `paper_started_at`, so this
+timestamp must predate the first paper tick. Moving it later to accommodate a
+run that overshot would defeat the single thing the field exists for. If 8%
+turns out to be the wrong number, the honest move is a new decision record and
+a new paper run — not an edit to this one.
 
 ## Why this is not blocked on the strategy decision
 
@@ -143,20 +150,24 @@ At the $100 base: **8% = $8**, or 0.8 of one position. At a $1,000 base the same
 actually feels, and both are stated because the percentage alone hides the
 difference.
 
-## What locking this requires
+## What locking this required — and what is done
 
-1. The user confirms 8% (or names a different number — the derivation above is
-   the argument, not a veto).
-2. `max_drawdown_threshold_pct` is written into `ops/live-gate.json` with
-   `threshold_set_at` set to that moment.
-3. The paper run starts **after** that timestamp. `_check_drawdown` fails the
-   gate if `threshold_set_at > paper_started_at`, so the ordering is enforced,
-   not merely intended.
-4. The fingerprint is regenerated, now including `capital_base`.
+1. ~~The user confirms 8%~~ — **done, 2026-09-14.**
+2. ~~`max_drawdown_threshold_pct` written into `ops/live-gate.json` with
+   `threshold_set_at`~~ — **done**, `2026-09-14T00:41:03+00:00`. The file is
+   committed as an audit record and contains *only* the threshold; every other
+   field is absent, so the gate reports seven failures and stays locked.
+3. The paper run must start **after** that timestamp. `_check_drawdown` fails
+   the gate if `threshold_set_at > paper_started_at`, so the ordering is
+   enforced, not merely intended. **Still outstanding** — no paper run has
+   started.
+4. The fingerprint must be regenerated, now including `capital_base`. **Still
+   outstanding** — there is nothing to approve yet.
 
 ## What this record does NOT do
 
-- **It does not set the number.** Nothing is written to `ops/live-gate.json`.
+- **It does not unlock anything.** Writing the threshold satisfied one decision,
+  not one gate check with evidence behind it. `tradecc gate` still exits 2.
 - **It does not start a paper run** or authorise live trading. The gate's other
   five checks are untouched and none of them currently pass.
 - **It does not reopen Stage 6c/6d**, which remains stood down pending an

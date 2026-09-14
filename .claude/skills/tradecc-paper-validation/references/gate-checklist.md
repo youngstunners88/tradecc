@@ -12,7 +12,7 @@ Use before any request to unlock live mode.
 ## Gate Criteria (enforced in `src/core/gate.py`)
 - [ ] ≥ 30 days of paper mode against real market data
 - [ ] Positive expectancy **after** realistic fees + slippage + Jupiter tiers
-- [ ] Max drawdown ≤ pre-agreed threshold (threshold written in a decision record before the period started — see `planning/decisions/2026-09-13-max-drawdown-threshold.md`, which proposes 8% and is **not yet locked**)
+- [ ] Max drawdown ≤ **8%** — locked 2026-09-14 in `planning/decisions/2026-09-13-max-drawdown-threshold.md` and written into `ops/live-gate.json` as `threshold_set_at: 2026-09-14T00:41:03+00:00`. That timestamp must predate `paper_started_at`; do not move it.
 - [ ] **`trade_count` ≥ 12** closed round trips
 - [ ] **`validated_fingerprint` matches the running config**
 - [ ] Paper logs are complete enough to reconstruct every trading day
