@@ -11,10 +11,12 @@ from typing import Any, Callable
 
 from core.config import StrategyConfig
 from strategy.base import Strategy
+from strategy.strategy_copy import NAME as COPY, CopyStrategy
 from strategy.strategy_momentum import NAME as MOMENTUM, MomentumStrategy
 
 _BUILDERS: dict[str, Callable[[dict[str, Any]], Strategy]] = {
     MOMENTUM: MomentumStrategy.from_params,
+    COPY: CopyStrategy.from_params,
 }
 
 

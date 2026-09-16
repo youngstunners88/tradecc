@@ -45,6 +45,10 @@ SECRET_ENV_NAMES = (
     "POSTHOG_API_KEY",
     "OPENROUTER_API_KEY",
     "AGENTMAIL_API_KEY",
+    # Research-only (copy-wallet extraction). Registered here with the
+    # others because "it never touches execution" is a reason it is low
+    # risk, not a reason to leave it unmasked in a log line.
+    "BITQUERY_API_KEY",
     # Stage 6c. Registered here with the others so it is masked before any
     # component can read the environment, not after.
     "SOLANA_PRIVATE_KEY",
