@@ -126,6 +126,69 @@ control. The boundary is enforced by **what you put in the prompt**, upstream
 of the model. A model instructed not to use wallet data it was given has
 still been given wallet data. Filter at the call site.
 
+## The tool
+
+`research/deepseek.py` is the working implementation. Prefer it over writing a
+fresh call: the guard, the provenance header, the cost accounting and the
+retry ceiling are all in it, and a hand-rolled call has none of them.
+
+```bash
+# Always cost it first. This runs the guard and sends nothing.
+PYTHONPATH=src .venv/bin/python research/deepseek.py \
+    --task edge-viability --question "..." --file research/notes.md --dry-run
+
+# Then run it. --pin for anything a decision record will cite.
+PYTHONPATH=src .venv/bin/python research/deepseek.py \
+    --task decision-record --pin --max-tokens 24000 \
+    --file planning/architecture/some-inventory.md \
+    --out planning/decisions/2026-09-15-something.md \
+    --question "..."
+```
+
+Tasks: `inventory-audit`, `edge-viability`, `decision-record`,
+`concept-lookup`, `freeform`. Each carries a role prompt on top of the
+boundary statement.
+
+Without `--out` the answer prints to stdout. **That is the delegation working
+as intended**: DeepSeek reads the 200 KB of decision records and the
+orchestrator reads the 2 KB that comes back. When the orchestrator's own
+context is the scarce resource, that asymmetry is the entire reason to
+delegate — not the price per token.
+
+### The guard is a real control, not a comment
+
+`research/deepseek_guard.py` allow-lists paths (`planning/`, `research/`,
+`docs/`, `.claude/skills/`, plus `README.md` and `CLAUDE.md`) and deny-lists
+content on top of that, so a key pasted into an otherwise sendable research
+note is still caught on the way out. It **raises rather than redacts** — a
+payload that needed redacting was assembled wrongly, and silently fixing it
+hides the assembly bug. It runs before the client is constructed, so there is
+no window in which a forbidden payload could be sent by a later code path.
+
+There is deliberately **no override flag**. A control with an override is a
+control that gets overridden at the moment it matters. If the guard refuses
+something you believe is safe, change the input, or change the guard in a
+commit someone can review — not at the call site.
+
+`src/` is not on the allow-list. Code review is not one of the jobs this skill
+assigns DeepSeek.
+
+### Budget for the reasoning chain, not just the answer
+
+This is a reasoning model: it spends completion budget thinking before it
+writes anything. A `max_tokens` that looks generous for the answer can be
+consumed entirely by the chain, and what comes back is an HTTP 200 with a
+length-truncated choice and **empty content** — not an error.
+
+The first real run of this tool failed exactly that way at
+`--max-tokens 6000`. The client now names the failure and tells you to raise
+the ceiling; the default is 16,000 and a substantial decision record wants
+24,000. For calibration: an 8,500-character decision record cost 11,000
+completion tokens, of which **8,900 were reasoning**.
+
+Cost comes from OpenRouter's own `usage.cost` where it is reported, not from
+the local price table — the table is a snapshot and goes stale silently.
+
 ## Model choice and cost
 
 Verified against the live catalogue on **2026-09-14**:
