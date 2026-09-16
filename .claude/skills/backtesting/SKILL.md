@@ -54,9 +54,42 @@ revision — changing it is a decision record and a STOP.
 ## The locked decision rule (replication)
 
 A result "replicates" only if **all** hold: net > 0 in ≥ 2/3 folds; pooled
-net > 0; no single fold > 60% of pooled net; pooled trades ≥ 12. Any
+net > 0; no single fold > 60% of pooled net; **pooled trades ≥ 19**. Any
 failure → it did not replicate. Write that up and stop; do not widen the
 grid or hunt for parameters that pass.
+
+### Why 19, and why it used to say 12
+
+**Changed 2026-09-16.** The minimum was 12, and 12 could not detect anything.
+
+Detecting an edge at 95% confidence and 80% power takes
+`n = 7.8489 × (σ/μ)²` round trips. This project has measured its own noise
+ratio (σ ÷ E|move|) at **1.33–1.55** across assets, near-invariant
+(`research/edge_budget.py`). That gives a floor of **13.88 round trips at the
+most generous end, 18.86 at the other**.
+
+Twelve was below the floor *at the generous end*, for a hypothetical perfect
+strategy with no lag and no cost drag. A result that "replicated" on exactly
+12 trades had not been detected — it had been guessed at, by a rule that said
+otherwise.
+
+**19 covers the measured range.** 14 would only be defensible if every future
+strategy happened to trade the quietest asset in it, and a floor set at the
+most flattering assumption is not a floor.
+
+Two things worth keeping in view:
+
+- **This is still a blanket constant standing in for a per-strategy
+  quantity.** The honest test is `n > 7.8489 × (σ/μ)²` using *that
+  strategy's own* measured noise. 19 is the conservative constant until
+  someone wires the real computation into the report template.
+- **No past result was invalidated by this change.** Every recorded verdict
+  in `research/backtests/` is "did not replicate" — nothing ever passed, on
+  12 trades or any other number. The rule was wrong, but it never let
+  anything through.
+
+Found by `research/copy_wallet/PHASE_A_VIABILITY_DRAFT.md` (Step 3), which
+was checking copy-trading and hit the rule on the way past.
 
 > ⚠️ **Open flag, 2026-09-16 — the pooled-12 minimum is below this project's
 > own detection floor.** With the measured noise ratio (σ ÷ E|move| = 1.33 at

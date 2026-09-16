@@ -50,9 +50,9 @@ Not allowed = any model, DeepSeek or otherwise, sending a swap.
 5. **Same replication rule as `.claude/skills/backtesting`.** Expanding
    3-fold walk-forward; a pass needs net > 0 in ≥ 2 of 3 folds, pooled
    net > 0, no single fold contributing > 60% of pooled net, and pooled
-   trades ≥ 12.
+   trades ≥ 19 (raised from 12 on 2026-09-16 — see that skill for why).
 
-   ⚠️ **But 12 is not enough here, and the viability gate proved it.**
+   ⚠️ **And 19 is still the floor, not the requirement here.**
    `research/copy_wallet/PHASE_A_VIABILITY_DRAFT.md` shows the detection
    floor is 13.88 round trips even for a *perfect, zero-lag* copy, and that
    12 pooled trades would only suffice if the copy retained 107.6% of the
