@@ -51,6 +51,14 @@ Not allowed = any model, DeepSeek or otherwise, sending a swap.
    3-fold walk-forward; a pass needs net > 0 in ≥ 2 of 3 folds, pooled
    net > 0, no single fold contributing > 60% of pooled net, and pooled
    trades ≥ 12.
+
+   ⚠️ **But 12 is not enough here, and the viability gate proved it.**
+   `research/copy_wallet/PHASE_A_VIABILITY_DRAFT.md` shows the detection
+   floor is 13.88 round trips even for a *perfect, zero-lag* copy, and that
+   12 pooled trades would only suffice if the copy retained 107.6% of the
+   source move — impossible. With a real 60s lag the requirement runs from
+   ~56 round trips (at 50% retention) to ~1,388 (at 10%). Do not treat a
+   12-trade pass as a Phase A result.
 6. **Buy-and-hold of the same cash is the mandatory benchmark.** Momentum
    died on exactly this comparison. A copy strategy that makes money and
    still loses to holding SOL has not found an edge.

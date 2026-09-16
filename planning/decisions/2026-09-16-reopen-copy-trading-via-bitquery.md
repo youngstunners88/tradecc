@@ -10,6 +10,21 @@
 
 **Date:** 2026-09-16 — decision-record date only. No backtest, selection-window, training-window, or fold date is set here; all protocol dates are deliberately `TBD`.
 
+> ⚠️ **Amended 2026-09-16, after this record was drafted.** The mandatory
+> `edge-viability-check` gate was then run on this hypothesis
+> (`research/copy_wallet/PHASE_A_VIABILITY_DRAFT.md`) and **it does not
+> pass**. Steps 1, 2 and 4 fail for want of a measured number; Step 3 fails
+> on arithmetic — 12 pooled trades sits below the detection floor of 13.88
+> even for a perfect zero-lag copy, and a 60s lag pushes the requirement to
+> ~56–1,388 round trips depending on retention.
+>
+> **Consequence: the "Phase A" backtest described below must not be built as
+> written.** What survives is the extraction half — the universe extractor
+> and position book *measure* the two missing numbers (post-lag retention
+> `c`, and the copyable fire rate), which is how this hypothesis would become
+> statable at all. The stopping rule below is superseded: Phase A cannot be
+> run to a verdict until those numbers exist and the trade minimum is raised.
+
 **Status:** Conditional reopen of **data collection only**. The structural-edge inventory verdict for copy-trading remains **Blocked** until Phase A produces numbers. This does **not** reopen directional prediction, and it does **not** unlock live mode.
 
 ## Decision

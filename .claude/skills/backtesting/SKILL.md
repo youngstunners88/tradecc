@@ -58,6 +58,26 @@ net > 0; no single fold > 60% of pooled net; pooled trades ≥ 12. Any
 failure → it did not replicate. Write that up and stop; do not widen the
 grid or hunt for parameters that pass.
 
+> ⚠️ **Open flag, 2026-09-16 — the pooled-12 minimum is below this project's
+> own detection floor.** With the measured noise ratio (σ ÷ E|move| = 1.33 at
+> its most generous end) and the standard 95/80 constant of 7.8489, detecting
+> *any* edge takes `7.8489 × 1.33² = 13.88` round trips. Twelve is short of
+> that by 1.88 trades — and 13.88 is the floor for a *perfect* strategy with
+> no lag and no cost drag; a real one needs more.
+>
+> So a result that "replicates" on exactly 12 trades has not been detected at
+> 95/80. It has been guessed at, by a rule that says otherwise. This is the
+> error class `.claude/skills/edge-viability-check` exists to catch: a
+> protocol rigorous about not fooling yourself on a *result*, while permitting
+> a sample that cannot produce a trustworthy result either way.
+>
+> **This rule is locked and has deliberately not been changed here.** Raising
+> it is the user's decision, not a side effect of the research draft that
+> found it (`research/copy_wallet/PHASE_A_VIABILITY_DRAFT.md`, Step 3 and its
+> review record). Until it is decided: treat a pass that rests on fewer than
+> ~14 pooled trades as unproven regardless of what this rule permits, and say
+> so in the write-up.
+
 ## Report template (end of every backtest file)
 
 ```
