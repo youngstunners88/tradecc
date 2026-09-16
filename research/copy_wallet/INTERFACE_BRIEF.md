@@ -138,6 +138,24 @@ clear *before* it is interesting. ATA rent is a refundable deposit — a
 capital lockup, not a cost — so it belongs in the write-up, not in the
 hurdle.
 
+## 4b. No new third-party dependencies — HTTP especially
+
+**Added after the first build round, where this brief's silence cost a
+rewrite.** The draft reached for `httpx`, reasonably, because nothing said not
+to.
+
+This project has **no third-party HTTP dependency and does not want one**.
+`src/execution/http.py` builds on `urllib.request` and says why: for a
+money-adjacent codebase a smaller supply-chain surface is worth more than the
+ergonomics of a nicer client, and everything above the transport is
+transport-agnostic anyway. The same reasoning covers research code, which runs
+in the same environment against the same lockfile.
+
+Runtime dependencies are `pydantic` and `PyYAML`; `pytest`/`pytest-cov` and
+`solders` are dev/live extras. **Anything else must be in the standard
+library.** Put network access behind an injectable transport protocol with an
+offline fake, so the unit suite passes with no network available.
+
 ## 5. Things that will get a diff rejected
 
 - Any import of `solders`, or any function named `send`/`sign`, anywhere in
