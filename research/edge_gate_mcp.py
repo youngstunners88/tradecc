@@ -51,6 +51,7 @@ def _load(name: str):
 
 
 _gate = _load("edge_gate")
+_inventory = _load("edge_inventory")
 
 mcp = MCPServer("tradecc_mcp")
 
@@ -291,6 +292,67 @@ async def tradecc_minimum_detectable_edge(
         },
         indent=2,
     )
+
+
+@mcp.tool(
+    name="tradecc_check_inventory",
+    annotations=ToolAnnotations(
+        title="Check a strategy idea against the closed-category ledger",
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+)
+async def tradecc_check_inventory(
+    idea: Annotated[
+        str,
+        Field(description=(
+            "The proposed strategy idea, in plain language. e.g. 'follow "
+            "profitable wallets and mirror their trades' or 'delta-neutral "
+            "funding carry'."
+        ), min_length=1, max_length=2000),
+    ],
+) -> str:
+    """Check a strategy idea against TradeCC's ledger of already-closed categories.
+
+    Run this FIRST, before tradecc_check_edge_viability — CLAUDE.md's routing
+    is "structural-edge-inventory first, then edge-viability-check". There is
+    no point costing out an edge for a category that was closed months ago for
+    a documented reason.
+
+    **This returns hints, not a ruling.** Keyword overlap is a prompt to go
+    read the row. Crucially, ZERO matches does not mean the idea is new — it
+    means a string match found nothing, which is not evidence of novelty. The
+    judgement the skill requires stays with a human: name the category, name
+    which of the four causes the idea must escape, and say HOW it escapes.
+
+    Args:
+            - idea (str): The proposed strategy, in plain language.
+
+    Returns:
+        str: JSON with schema:
+        {
+          "idea": str,
+          "keyword_matches": [ {"category": str, "verdict": str, "cause": str,
+                                "reason": str, "citations": [str],
+                                "reopens_when": str} ],
+          "also_closed_matches": [str],
+          "is_this_a_verdict": false,     # always false, by design
+          "what_you_must_still_do": str,
+          "the_four_causes": {key: {"name": str, "description": str}},
+          "standing_position": str
+        }
+
+    Examples:
+        - "Should we try copy-trading?" -> matches Copy-trading (Blocked, data
+          infrastructure), with the reopening condition and the live PR #14 note.
+        - "What about an idea nobody has tried?" -> expect zero matches, and
+          read what_you_must_still_do rather than treating that as a green light.
+    """
+    import json
+
+    return json.dumps(_inventory.lookup(idea), indent=2)
 
 
 if __name__ == "__main__":
