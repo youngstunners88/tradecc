@@ -144,3 +144,44 @@ and nothing here escapes any of the four causes — these are tools, not
 hypotheses. The one genuinely open thread is the narrow OpenBB
 point-in-time question, which is a *data-access* question and is logged as
 EVALUATING rather than acted on.
+
+---
+
+## Follow-up: the OpenBB question, answered (2026-09-20)
+
+This review left exactly one thing open — OpenBB logged as EVALUATING on a
+single narrow question: *does any provider expose as-reported-at-the-time
+history?* Answered from the source at commit `3e071fc` (dated 2026-07-20).
+
+**Yes, and better than I assumed.** The SEC provider's statement models carry a
+`pit_mode` flag: *"returns data as originally reported at the time of filing,
+without subsequent restatements or amendments. For annual data, uses the
+original 10-K values. For quarterly data, preserves 10-Q filing vintage instead
+of using restated comparatives from the 10-K."* That is genuine point-in-time
+handling, and the review above was wrong to imply the concept was absent — it
+is absent from the *docs*, not from the code.
+
+**And it is useless to us, for a reason no amount of PIT quality fixes.**
+
+| Checked | Result |
+|---|---|
+| Crypto router endpoints | **2** — `CryptoHistorical`, `CryptoSearch` |
+| Providers implementing them | FMP, Tiingo, yfinance — CEX-aggregated OHLCV |
+| `solana` across all 33 providers | **0 hits** |
+| `uniswap`, `dexscreener`, `helius`, `wallet_address` | **0 hits each** |
+| `survivorship` anywhere in the repo | **0 hits** |
+
+The PIT machinery is attached to SEC XBRL filings for US-listed equities. Our
+two cause-3 blockers are point-in-time-clean *Solana wallet enumeration* and
+*pump.fun graduation windows*. OpenBB has no on-chain data of any kind, so the
+axis it is strong on and the axis we are blocked on do not intersect.
+
+Moved to REJECTED in `external-tools-registry.md`. Reopen only if OpenBB adds
+an on-chain Solana provider — a different product, not a version bump.
+
+**Worth keeping from this:** the verdict turned on *asset class*, not on data
+quality, and the original review nearly missed that by arguing about PIT
+documentation instead of checking whether the tool covers our chain at all.
+`repo-intake` step 2 ("name which binding constraint it would touch") catches
+this when it is asked precisely: not "does it touch data access?" but "does it
+touch *our* data access?"
