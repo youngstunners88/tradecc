@@ -84,7 +84,9 @@ def test_positive_expectancy_still_says_the_gate_needs_more():
     report = render(result([trade(gross_up="20", fees="0.42")]))
 
     assert "not sufficient" in report
-    assert "30 days of paper trading" in report
+    from core.gate import MINIMUM_PAPER_TRADING_DAYS
+
+    assert f"{MINIMUM_PAPER_TRADING_DAYS} days of paper trading" in report
 
 
 def test_lists_trades():

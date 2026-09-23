@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from backtest.runner import BacktestResult
+from core.gate import MINIMUM_PAPER_TRADING_DAYS
 
 MONEY = Decimal("0.0001")
 PERCENT = Decimal("0.01")
@@ -69,7 +70,8 @@ def render_report(
             "not clear the validation gate."
             if result.expectancy_usd <= 0
             else "> Net expectancy is positive. Necessary for the validation gate, "
-            "not sufficient — the gate also requires 30 days of paper trading "
+            "not sufficient — the gate also requires "
+            f"{MINIMUM_PAPER_TRADING_DAYS} days of paper trading "
             "and a max drawdown inside a threshold set beforehand."
         ),
         "",

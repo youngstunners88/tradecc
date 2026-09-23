@@ -82,12 +82,12 @@ def test_empty_object_is_locked(tmp_path, run_config):
 
 def test_short_paper_run_is_locked(tmp_path, run_config):
     result = evaluate_live_gate(
-        write_gate(tmp_path / "gate.json", run_config, paper_ended_at="2026-01-20T00:00:00+00:00"),
+        write_gate(tmp_path / "gate.json", run_config, paper_ended_at="2026-01-02T00:00:00+00:00"),
         run_config,
     )
 
     assert not result.unlocked
-    assert "needs at least 30" in result.describe()
+    assert "needs at least 2" in result.describe()
 
 
 def test_drawdown_over_threshold_is_locked(tmp_path, run_config):
@@ -150,7 +150,7 @@ def test_all_failures_are_reported_together(tmp_path, run_config):
         write_gate(
             tmp_path / "gate.json",
             run_config,
-            paper_ended_at="2026-01-05T00:00:00+00:00",
+            paper_ended_at="2026-01-02T00:00:00+00:00",
             net_expectancy_usd=-3,
             approved_by=None,
         ),
@@ -365,7 +365,7 @@ def test_fingerprint_mismatch_is_detected_for_every_mismatch_failure(failure):
     [
         "net_expectancy_usd missing or not a number",
         "trade_count missing or not an integer",
-        "paper run was 3 days, needs at least 30",
+        "paper run was 1 days, needs at least 2",
         "observed drawdown 12% exceeds threshold 8%",
         "approved_by missing — a human must explicitly sign off on live trading",
     ],
@@ -460,3 +460,24 @@ def test_raising_the_capital_base_invalidates_an_approval(tmp_path, run_config):
     assert not result.unlocked
     assert result.fingerprint_mismatch is True
     assert any("capital_base" in failure for failure in result.failures)
+
+
+def test_the_paper_window_is_two_days_by_explicit_decision():
+    """Set to 2 by the user on 2026-09-23 (previously 30). Pinned so a change
+    in either direction is a visible, reviewed edit rather than a drift."""
+    from core.gate import MINIMUM_PAPER_TRADING_DAYS
+
+    assert MINIMUM_PAPER_TRADING_DAYS == 2
+
+
+def test_exactly_two_days_clears_the_calendar_check_and_one_does_not(tmp_path, run_config):
+    one = evaluate_live_gate(
+        write_gate(tmp_path / "a.json", run_config, paper_ended_at="2026-01-02T00:00:00+00:00"),
+        run_config,
+    )
+    two = evaluate_live_gate(
+        write_gate(tmp_path / "b.json", run_config, paper_ended_at="2026-01-03T00:00:00+00:00"),
+        run_config,
+    )
+    assert "needs at least 2" in one.describe()
+    assert "needs at least" not in two.describe()

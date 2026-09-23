@@ -27,7 +27,19 @@ from core.config import RunConfig, fingerprint_sections
 from core.performance import MIN_POOLED_TRADES
 from core.types import finite_decimal
 
-MINIMUM_PAPER_TRADING_DAYS = 30
+# 2 days, set by the user on 2026-09-23 after being told the risk twice.
+# Previously 30. Recorded here rather than silently edited:
+#
+#   * The calendar check is the ONLY thing this changes. `MIN_POOLED_TRADES`,
+#     the drawdown threshold, the fingerprint and the human approval are all
+#     untouched, so the gate still cannot open on two quiet days alone.
+#   * At the ~2.35 round trips/day measured for this strategy, 2 days is ~5
+#     trades. `test_trade_power` shows what that can and cannot detect.
+#   * The user's stated revisit trigger: "if we find that we are losing
+#     trades we can always readjust it." Losing trades on paper is the signal
+#     to raise this again, and the drawdown threshold below is what will
+#     surface them.
+MINIMUM_PAPER_TRADING_DAYS = 2
 
 # Stable prefixes for the fingerprint *mismatch* failures.
 # `GateResult.fingerprint_mismatch` reads these rather than matching on prose,

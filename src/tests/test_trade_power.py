@@ -79,8 +79,24 @@ def test_the_two_directions_agree():
 
 
 def test_a_thirty_day_window_cannot_confirm_a_sub_quarter_percent_edge():
-    """The gate's own window is 30 days. At ~2.35 round trips/day that is ~70
-    trades, which cannot resolve anything under about 0.33% even at $100."""
+    """The gate's window WAS 30 days. At ~2.35 round trips/day that is ~70
+    trades, which cannot resolve anything under about 0.33% even at $100.
+    Kept as the reference point for the 2-day window below."""
     budget = 70
     for size in ("5", "10", "25", "100"):
         assert power(size).minimum_detectable_edge(budget) > Decimal("0.003")
+
+
+def test_the_two_day_window_detects_strictly_less_than_the_thirty_day_one():
+    """The gate's window is now 2 days (user decision, 2026-09-23). At ~2.35
+    round trips/day that is ~5 trades. This does not argue with the decision;
+    it records what the window can see, so a pass is read for what it is.
+
+    The calendar check is not what makes the gate safe on its own -- the
+    pooled-trade minimum, drawdown threshold and human approval still have to
+    pass independently.
+    """
+    for size in ("5", "10", "25", "100"):
+        two_day = power(size).minimum_detectable_edge(5)
+        thirty_day = power(size).minimum_detectable_edge(70)
+        assert two_day > thirty_day
