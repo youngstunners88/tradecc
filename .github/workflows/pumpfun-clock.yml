@@ -34,7 +34,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # ref: main, NOT the default (the SHA fixed when the run was TRIGGERED).
+      # A run queued behind another poll by the concurrency group would
+      # otherwise poll against a stale log and fail to push its append --
+      # which is exactly what happened to the first scheduled run (2026-09-23
+      # 19:47). Checking out the branch tip at run time sees the prior poll.
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-python@v5
         with:
