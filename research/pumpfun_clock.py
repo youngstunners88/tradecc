@@ -258,9 +258,9 @@ def _get_json(url: str) -> object:
     except NameError:
         client = _CLIENT = ProviderHttpClient(
             provider="pumpfun-clock", transport=UrllibTransport(),
-            # 20/min: GeckoTerminal's public tier rate-limited at 30/min in practice
-            # (429s measured 2026-09-23), shared with the pump.fun listing calls.
-            limiter=RateLimiter(max_requests=20, per_seconds=60.0, name="pumpfun-clock"))
+            # 10/min: GeckoTerminal rate-limits GitHub's shared runner IPs far below
+            # its nominal 30/min (measured 2026-09-23). Shared with pump.fun listing calls.
+            limiter=RateLimiter(max_requests=10, per_seconds=60.0, name="pumpfun-clock"))
     return client.request("GET", url).json()
 
 
@@ -269,26 +269,58 @@ def live_list_page(offset: int, limit: int) -> list[dict]:
     return data if isinstance(data, list) else []
 
 
-def live_lookup(pools: Sequence[str]) -> dict[str, float]:
-    """Graduation times by pool. A failed batch is left OUT, not guessed.
+def lookup_with_retries(
+    pools: Sequence[str],
+    fetch_batch: Callable[[Sequence[str]], dict[str, float]],
+    sleep: Callable[[float], None],
+    passes: int = 3,
+    backoff_s: float = 60.0,
+) -> tuple[dict[str, float], int]:
+    """Look up graduation times in batches; retry FAILED batches after a pause.
 
-    Its coins come back as unresolved and are retried next poll while they
-    stay in the window. A rate-limit must never crash the poll: the poll's own
-    coverage record is what detects a hole, and a crash would lose it.
+    Measured 2026-09-23: from GitHub's shared runner IPs GeckoTerminal
+    rate-limited so hard that 300 of a poll's coins came back unresolved,
+    while the same poll from another IP resolved all of them. Unresolved is
+    not lost -- it is retried next poll -- but a backlog that re-forms every
+    poll lets cohort coins age out of the window. So a failed batch waits
+    `backoff_s` and is tried again, up to `passes` times, within the poll.
+    Returns (times, batches still failed after the last pass).
     """
     out: dict[str, float] = {}
-    for i in range(0, len(pools), GECKO_BATCH):
-        batch = pools[i:i + GECKO_BATCH]
-        try:
-            payload = _get_json(GECKO_MULTI.format(addrs=",".join(batch)))
-        except Exception as e:  # noqa: BLE001 -- any provider failure = unresolved
-            print(f"lookup batch {i // GECKO_BATCH} failed ({type(e).__name__}); left unresolved", file=sys.stderr)
-            continue
-        for p in (payload or {}).get("data", []):
-            a = p.get("attributes", {})
-            if a.get("address") and a.get("pool_created_at"):
-                out[a["address"]] = datetime.fromisoformat(
-                    a["pool_created_at"].replace("Z", "+00:00")).timestamp()
+    pending = [list(pools[i:i + GECKO_BATCH]) for i in range(0, len(pools), GECKO_BATCH)]
+    for attempt in range(passes):
+        failed = []
+        for batch in pending:
+            try:
+                out.update(fetch_batch(batch))
+            except Exception:  # noqa: BLE001 -- any provider failure = retry, then unresolved
+                failed.append(batch)
+        pending = failed
+        if not pending:
+            break
+        if attempt < passes - 1:
+            sleep(backoff_s)
+    return out, len(pending)
+
+
+def _fetch_batch(batch: Sequence[str]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    payload = _get_json(GECKO_MULTI.format(addrs=",".join(batch)))
+    for p in (payload or {}).get("data", []):
+        a = p.get("attributes", {})
+        if a.get("address") and a.get("pool_created_at"):
+            out[a["address"]] = datetime.fromisoformat(
+                a["pool_created_at"].replace("Z", "+00:00")).timestamp()
+    return out
+
+
+def live_lookup(pools: Sequence[str]) -> dict[str, float]:
+    """Graduation times by pool. A batch that still fails after retries is
+    left OUT, not guessed: its coins come back unresolved and are retried
+    next poll while they stay in the window."""
+    out, still_failed = lookup_with_retries(pools, _fetch_batch, time.sleep)
+    if still_failed:
+        print(f"{still_failed} lookup batch(es) failed after retries; left unresolved", file=sys.stderr)
     return out
 
 

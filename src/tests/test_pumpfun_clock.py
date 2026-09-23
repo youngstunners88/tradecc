@@ -227,3 +227,45 @@ def test_live_listing_returns_complete_coins_newest_first():
     assert page and all(c["complete"] for c in page)
     ts = [c["created_timestamp"] for c in page]
     assert ts == sorted(ts, reverse=True)
+
+
+# --- rate-limit retries ------------------------------------------------------------
+
+def test_failed_batches_are_retried_after_a_backoff():
+    calls = {"n": 0}
+    slept = []
+    def fetch(batch):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("429")
+        return {p: 1.0 for p in batch}
+    out, failed = pc.lookup_with_retries(["a", "b"], fetch, slept.append, passes=3, backoff_s=60)
+    assert out == {"a": 1.0, "b": 1.0} and failed == 0
+    assert slept == [60]
+
+
+def test_a_batch_failing_every_pass_is_reported_not_guessed():
+    out, failed = pc.lookup_with_retries(["a"], lambda b: (_ for _ in ()).throw(RuntimeError("429")),
+                                         lambda s: None, passes=3)
+    assert out == {} and failed == 1
+
+
+def test_no_sleep_after_the_last_pass_or_when_nothing_failed():
+    slept = []
+    pc.lookup_with_retries(["a"], lambda b: {"a": 1.0}, slept.append)
+    assert slept == []
+    pc.lookup_with_retries(["a"], lambda b: (_ for _ in ()).throw(RuntimeError()), slept.append, passes=2)
+    assert slept == [60.0]
+
+
+def test_only_failed_batches_are_retried():
+    seen = []
+    def fetch(batch):
+        seen.append(tuple(batch))
+        if batch[0] == "x0" and seen.count(tuple(batch)) == 1:
+            raise RuntimeError("429")
+        return {p: 1.0 for p in batch}
+    pools = [f"x{i}" for i in range(pc.GECKO_BATCH)] + ["y0"]
+    out, failed = pc.lookup_with_retries(pools, fetch, lambda s: None)
+    assert failed == 0 and len(out) == len(pools)
+    assert seen.count(("y0",)) == 1
