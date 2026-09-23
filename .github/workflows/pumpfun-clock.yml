@@ -1,0 +1,74 @@
+name: pumpfun-clock
+
+# The pump.fun graduation clock, every 2 hours, as locked by
+# planning/decisions/2026-09-23-pumpfun-clock-amendment.md.
+#
+# OBSERVATION ONLY. Two keyless public APIs (pump.fun v3, GeckoTerminal). No
+# secret is referenced, no key exists, nothing is priced, traded or sent.
+#
+# `schedule` runs only from the default branch, so this goes live on merge.
+# The clock is started ONCE, by hand: run this workflow with init=true. Every
+# scheduled run after that only polls; a missing log makes it refuse rather
+# than silently start a fresh 30-day clock.
+on:
+  schedule:
+    - cron: "41 */2 * * *"   # every 2h, off the hour
+  workflow_dispatch:
+    inputs:
+      init:
+        description: "Start the clock (once). Refuses if the log already exists."
+        type: boolean
+        default: false
+
+# One poll at a time: two overlapping polls would both append, and the second
+# would see the first's graduations as unknown.
+concurrency:
+  group: pumpfun-clock
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Init (manual, once)
+        if: github.event_name == 'workflow_dispatch' && inputs.init
+        run: python research/pumpfun_clock.py --init
+
+      - name: Poll
+        run: python research/pumpfun_clock.py --poll
+
+      - name: Status
+        run: python research/pumpfun_clock.py --status
+
+      - name: Commit the clock
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- research/clocks/ && [ -z "$(git ls-files --others --exclude-standard research/clocks/)" ]; then
+            echo "Clock unchanged."
+            exit 0
+          fi
+          git config user.name  "tradecc-pumpfun-clock"
+          git config user.email "tradecc-pumpfun-clock@users.noreply.github.com"
+          git add research/clocks/
+          git commit -m "pumpfun-clock: poll $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase
+          done
+          echo "::error::could not push the clock after 3 attempts"
+          exit 1
