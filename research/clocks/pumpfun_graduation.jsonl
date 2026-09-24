@@ -1735,3 +1735,4 @@
 {"created_ts": 1790234307.0, "fill_h": 3.245, "graduation_ts": 1790245989.0, "kind": "grad", "mint": "26FY1scLKpX99ppsj3afiycyPPwwLTuRNvXtZcfopump", "observed_at": 1790251700.1517978, "pool": "5KbnzKwYxH7wqjBLfNJaE8eTWZyknp2XRWenEnm52sRb"}
 {"created_ts": 1790223266.0, "fill_h": 6.5072, "graduation_ts": 1790246692.0, "kind": "grad", "mint": "BjgutVEnxpHje7uQ7tCGhXPyoQhyuhePVWCjgVFGpump", "observed_at": 1790251700.1517978, "pool": "7qUiTrxmUegDHMti5NuPABWrUo3RTnqtBNdxVGidEz6z"}
 {"created_ts": 1790184469.0, "fill_h": 18.4008, "graduation_ts": 1790250712.0, "kind": "grad", "mint": "GrW1bFdSfnDM1vNCMzaRnHbHAgus23hsJ3nJLdLiPzRi", "observed_at": 1790251700.1517978, "pool": "DRoVmbYq74vJCpgRKtvPZYMEcgDAZoGJkCjUM6FEUen9"}
+{"complete": true, "hole": null, "kind": "poll", "listed": 1050, "listing_exhausted": true, "new_excluded": 0, "new_grad": 0, "oldest_created_age_h": 25.516, "prev_t": 1790251700.1517978, "t": 1790251838.6825519, "unresolved": 0}
