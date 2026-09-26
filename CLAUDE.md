@@ -45,7 +45,7 @@ decisions that contradict it.
 |---|---|---|---|
 | Define or change scope/strategy | `/planning` | CONTEXT.md, `specs/mvp_spec.md` | — |
 | Write or modify bot code | `/src` | CONTEXT.md | testing-skill |
-| Propose ANY strategy idea | — | — | **structural-edge-inventory first, then edge-viability-check** |
+| Propose ANY strategy idea | — | — | **structural-edge-inventory first, then edge-viability-check** (runnable: `research/edge_gate.py`, or the `tradecc_check_edge_viability` MCP tool) |
 | Backtest or validate a strategy | `/research` | CONTEXT.md | backtesting-skill |
 | Deploy, monitor, or handle an incident | `/ops` | CONTEXT.md | — |
 
