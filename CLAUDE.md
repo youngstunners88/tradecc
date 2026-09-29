@@ -47,6 +47,7 @@ decisions that contradict it.
 | Write or modify bot code | `/src` | CONTEXT.md | testing-skill |
 | Propose ANY strategy idea | — | — | **structural-edge-inventory first, then edge-viability-check** |
 | Backtest or validate a strategy | `/research` | CONTEXT.md | backtesting-skill |
+| Copy-wallet extract / `strategy_copy` | `/research` + `/src` | `research/copy_wallet/INTERFACE_BRIEF.md` | **copy-wallet-bitquery**, backtesting, openrouter-deepseek |
 | Deploy, monitor, or handle an incident | `/ops` | CONTEXT.md | — |
 
 ## Strategy search is closed pending a decision
