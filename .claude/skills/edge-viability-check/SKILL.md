@@ -17,6 +17,23 @@ spending a month producing a result that could not mean anything.
 This is that step. It runs **first**, and it is cheap: the whole thing is an
 afternoon of arithmetic against data already on disk.
 
+## Run it, don't just read it
+
+As of 2026-09-19 this gate is a function, not only a document:
+
+```bash
+PYTHONPATH=src .venv/bin/python research/edge_gate.py --edge 0.5 --size 10
+```
+
+and an MCP server (`research/edge_gate_mcp.py`, tool
+`tradecc_check_edge_viability`) so any session or tool can screen a claim in
+one call. It reimplements nothing — it delegates to `research/trade_power.py`.
+
+Steps 1-3 are decided automatically. **Step 4 is deliberately returned as
+undecided**, because it needs real bars via `research/edge_budget.py`; a gate
+that fabricated its hardest step would be worse than one that admits the gap.
+A verdict of `INCOMPLETE` is not a pass.
+
 ## The gate
 
 A hypothesis does not proceed to pre-registration until all four answer yes.

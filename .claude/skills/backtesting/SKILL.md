@@ -54,9 +54,20 @@ revision — changing it is a decision record and a STOP.
 ## The locked decision rule (replication)
 
 A result "replicates" only if **all** hold: net > 0 in ≥ 2/3 folds; pooled
-net > 0; no single fold > 60% of pooled net; pooled trades ≥ 12. Any
+net > 0; no single fold > 60% of pooled net; pooled trades ≥ 19. Any
 failure → it did not replicate. Write that up and stop; do not widen the
 grid or hunt for parameters that pass.
+
+> **Raised from 12 to 19 on 2026-09-16 (approved).** Detecting any edge at
+> 95/80 takes `7.8489 × (σ/μ)²` round trips; this project's measured noise
+> ratio is 1.33–1.55, giving a floor of 13.88 at the most generous end and
+> 18.86 at the other. Twelve was below the floor *even for a perfect
+> strategy* — a result that "replicated" on 12 trades had not been detected,
+> it had been guessed at. 19 covers the measured range. No past result was
+> invalidated: every recorded verdict in `research/backtests/` is "did not
+> replicate". The full derivation is in
+> `research/copy_wallet/PHASE_A_VIABILITY_DRAFT.md` (PR #14), where the flaw
+> was found; `research/edge_gate.py` enforces the same 19.
 
 ## Report template (end of every backtest file)
 
