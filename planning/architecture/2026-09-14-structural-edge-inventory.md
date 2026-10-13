@@ -44,6 +44,16 @@ hunting, depeg arbitrage and CEX↔DEX listing arbitrage are all cause 1;
 statistical arbitrage on correlated pairs is cause 4, since a spread is still a
 draw from a return distribution and `edge_budget.py` applies unchanged.
 
+> **Footnote, 2026-09-16 — data-collection reopen, verdict unchanged.**
+> Copy-trading was blocked on data infrastructure (cause 3), not economics:
+> point-in-time-clean wallet enumeration needed ~9,982h at the cheapest pool's
+> 0.41 tx/s. Bitquery may remove that specific bottleneck, and a Phase A paper
+> pipeline is being built under `.claude/skills/copy-wallet-bitquery`.
+>
+> **The verdict stays Blocked until Phase A produces numbers.** Removing the
+> reason a thing was untestable makes it testable, not true. Nothing here
+> reopens directional prediction, and nothing here touches the live gate.
+
 ## Two verdicts needed citations — now supplied
 
 **DEX market-making (LVR) and funding-rate carry appeared nowhere in this

@@ -21,12 +21,22 @@ re-derives a closed verdict at the cost of another test window.
 |---|---|---|---|
 | Cross-DEX arbitrage | **Rejected** | Latency race; dominated by professional, co-located, low-latency operators | `2026-09-09-strategy-and-stack.md`, `CLAUDE.md:31`, `mvp_spec.md` |
 | Sniping new launches | **Rejected** | Same latency race, plus MEV exposure | `2026-09-09-strategy-and-stack.md`, `CLAUDE.md:31` |
-| Copy-trading (rigorous) | **Blocked** | Data infrastructure, not economics — point-in-time-clean wallet enumeration needs ~9,982h at the cheapest pool's 0.41 tx/s | `2026-09-13-copy-trading-wallet-universe.md` |
+| Copy-trading (rigorous) | **Blocked** | Data infrastructure, not economics — point-in-time-clean wallet enumeration needs ~9,982h at the cheapest pool's 0.41 tx/s | `research/backtests/2026-09-12_copy-trading-feasibility-probe.md` (the 0.41 tx/s measurement, line 56) — **corrected 2026-09-16**: this row previously cited `2026-09-13-copy-trading-wallet-universe.md`, which does not exist |
 | pump.fun graduation timing | **Parked** | Data infrastructure — historical middle window unreachable; only forward collection works, a weeks-long commitment that was declined | `2026-09-13-pumpfun-graduation-duration.md`, PR #5 |
 | Directional prediction | **Closed (class)** | Requires 73.8–94.8% direction accuracy; achievable is mid-50s | `2026-09-14-close-directional-prediction-class.md` |
 | Capital-range increase | **Closed** | Costs were never the binding constraint; strategy asymptotes at ~22% of buy-and-hold | `2026-09-13-capital-range-sensitivity.md` |
 | DEX market-making / LP | **Rejected** | Loss-versus-rebalancing — a passive LP is adversely selected by arbitrageurs; the fee income does not compensate | `2026-09-14-dex-market-making-lvr.md` |
 | Funding-rate carry / basis | **On hold** | Requires a perps venue (not Solana spot), and a $100–500 minimum — outside both the current scope and the $5–$10 size | `2026-09-14-funding-rate-carry.md` |
+
+> **Footnote, 2026-09-16 — data-collection reopen, verdict unchanged.**
+> Copy-trading was blocked on data infrastructure (cause 3), not economics:
+> point-in-time-clean wallet enumeration needed ~9,982h at the cheapest pool's
+> 0.41 tx/s. Bitquery may remove that specific bottleneck, and a Phase A paper
+> pipeline is being built under `.claude/skills/copy-wallet-bitquery`.
+>
+> **The verdict stays Blocked until Phase A produces numbers.** Removing the
+> reason a thing was untestable makes it testable, not true. Nothing here
+> reopens directional prediction, and nothing here touches the live gate.
 
 ## The two uncited verdicts now have records
 
