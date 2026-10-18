@@ -15,6 +15,12 @@ dependencies = [
 live = [
     "solders>=0.21",
 ]
+# Research-only. The MCP server in research/edge_gate_mcp.py exposes the
+# viability gate as tools; it is never imported by the bot, so this stays out
+# of the base dependencies exactly like `live`.
+mcp = [
+    "mcp>=2.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
